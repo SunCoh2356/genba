@@ -294,21 +294,34 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
   <div class="modal">
     <div class="modal-handle"></div>
     <h3>書き出し・納品</h3>
-    <div class="export-options">
-      <div class="export-card" onclick="exportExcel()">
-        <div class="export-icon">📊</div>
-        <h4>Excelデータ書き出し</h4>
-        <p>台帳データ（現場名・日付・視点場・コメント・GPS座標・撮影方向）をExcelファイルで保存します。写真は別途保存されます。</p>
+    <!-- 一括書き出し -->
+    <button class="btn btn-primary btn-full" onclick="exportAll()" style="margin-bottom:16px;font-size:16px">
+      🚀 一括書き出し（Excel＋写真＋PDF）
+    </button>
+    <div id="exportProgress" style="display:none;margin-bottom:16px;padding:12px;background:var(--cell-bg);border-radius:var(--radius)">
+      <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:6px" id="exportProgressLabel">書き出し中...</div>
+      <div style="background:var(--border);border-radius:4px;height:8px;overflow:hidden">
+        <div id="exportProgressBar" style="height:100%;background:var(--orange);width:0%;transition:width 0.3s;border-radius:4px"></div>
       </div>
-      <div class="export-card" onclick="exportPhotosZip()">
-        <div class="export-icon">🖼️</div>
-        <h4>写真を一括保存</h4>
-        <p>現場の全写真を連番ファイル名（視点場01.jpg など）でまとめてダウンロードします。</p>
-      </div>
-      <div class="export-card" onclick="printPDF()">
-        <div class="export-icon">📄</div>
-        <h4>PDF納品（印刷）</h4>
-        <p>A4横レイアウトで台帳を印刷・PDF保存します。地図・写真・コメントを含めた完成形です。印刷ダイアログから「PDFに保存」を選択してください。</p>
+    </div>
+    <div style="border-top:1px solid var(--border);padding-top:12px;margin-bottom:12px">
+      <div style="font-size:12px;color:var(--text-sub);margin-bottom:10px;text-align:center">個別に書き出す</div>
+      <div class="export-options">
+        <div class="export-card" onclick="exportExcel()">
+          <div class="export-icon">📊</div>
+          <h4>Excelデータ書き出し</h4>
+          <p>台帳データ（現場名・日付・視点場・コメント・GPS座標・撮影方向）をExcelファイルで保存します。</p>
+        </div>
+        <div class="export-card" onclick="exportPhotosZip()">
+          <div class="export-icon">🖼️</div>
+          <h4>写真を一括保存</h4>
+          <p>現場の全写真を連番ファイル名（視点場01.jpg など）でまとめてダウンロードします。</p>
+        </div>
+        <div class="export-card" onclick="printPDF()">
+          <div class="export-icon">📄</div>
+          <h4>PDF納品（印刷）</h4>
+          <p>A4横レイアウトで台帳を印刷・PDF保存します。印刷ダイアログから「PDFに保存」を選択してください。</p>
+        </div>
       </div>
     </div>
     <button class="btn btn-ghost btn-full" onclick="closeModal('exportModal')">キャンセル</button>
@@ -625,6 +638,66 @@ function handleFileInput(e){
 
 // ===== 書き出し =====
 function openExportModal(){openModal('exportModal')}
+
+// 一括書き出し
+async function exportAll(){
+  const progress=document.getElementById('exportProgress');
+  const label=document.getElementById('exportProgressLabel');
+  const bar=document.getElementById('exportProgressBar');
+  progress.style.display='block';
+
+  // Step1: Excel
+  label.textContent='📊 Excelを書き出し中...';bar.style.width='10%';
+  await new Promise(r=>setTimeout(r,300));
+  exportExcel();
+  bar.style.width='33%';
+  await new Promise(r=>setTimeout(r,500));
+
+  // Step2: 写真
+  const project=projects[currentProjectId];
+  const totalPhotos=project.pages.reduce((s,pg)=>s+pg.cells.filter(c=>c.photo).length,0);
+  if(totalPhotos>0){
+    label.textContent=`🖼️ 写真を保存中（${totalPhotos}枚）...`;
+    let sn=0,count=0;
+    for(let pageIdx=0;pageIdx<project.pages.length;pageIdx++){
+      const page=project.pages[pageIdx];
+      for(let ci=0;ci<page.cells.length;ci++){
+        const cell=page.cells[ci];
+        if(!cell.photo){sn++;continue}
+        const num=sn+ci+1;
+        const filename=`視点場${String(num).padStart(2,'0')}.jpg`;
+        const base64=cell.photo.split(',')[1];
+        const byteStr=atob(base64);
+        const arr=new Uint8Array(byteStr.length);
+        for(let i=0;i<byteStr.length;i++)arr[i]=byteStr.charCodeAt(i);
+        const blob=new Blob([arr],{type:'image/jpeg'});
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement('a');
+        a.href=url;a.download=filename;
+        document.body.appendChild(a);a.click();
+        document.body.removeChild(a);URL.revokeObjectURL(url);
+        count++;
+        bar.style.width=`${33+Math.round(count/totalPhotos*33)}%`;
+        await new Promise(r=>setTimeout(r,400));
+      }
+      sn+=page.cells.length;
+    }
+  }
+  bar.style.width='80%';
+
+  // Step3: PDF
+  label.textContent='📄 PDF印刷を準備中...';
+  await new Promise(r=>setTimeout(r,500));
+  bar.style.width='100%';
+  label.textContent='✅ 書き出し完了！印刷ダイアログが開きます';
+  await new Promise(r=>setTimeout(r,800));
+  progress.style.display='none';
+  closeModal('exportModal');
+  setTimeout(()=>{
+    showToast('印刷ダイアログから「PDFに保存」を選択してください');
+    setTimeout(()=>window.print(),500);
+  },300);
+}
 
 // Excel書き出し
 function exportExcel(){
