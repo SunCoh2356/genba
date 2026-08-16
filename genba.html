@@ -1233,8 +1233,9 @@ function printPDF(){
 
 // ===== 地図モーダル =====
 function openMapModal(target){
-  // 台帳の地図を一時非表示（重なり防止）
-  document.querySelectorAll('.map-canvas-wrap').forEach(el=>el.style.visibility='hidden');
+  // 台帳画面全体を非表示（Leafletがz-indexを無視するため）
+  document.querySelector('.ledger-screen').style.display='none';
+  document.querySelector('.action-bar').style.display='none';
   currentMapTarget=target;
   const isOverview=target==='overview';
   document.getElementById('mapModalTitle').textContent=isOverview?'俯瞰図の範囲を設定':'視点場の範囲を設定';
@@ -1274,7 +1275,9 @@ function updateOverviewScale(){
 }
 function closeMapModal(){
   document.getElementById('mapModal').classList.remove('open');
-  // 台帳の地図を再表示
+  // 台帳画面を再表示
+  document.querySelector('.ledger-screen').style.display='block';
+  document.querySelector('.action-bar').style.display='grid';
   document.querySelectorAll('.map-canvas-wrap').forEach(el=>el.style.visibility='visible');
 }
 function centerOnGPS(){
