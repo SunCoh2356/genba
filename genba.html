@@ -559,47 +559,73 @@ async function openProject(id){
 // ===== ページ =====
 function renderPages(){
   const project=projects[currentProjectId];
-  document.getElementById('pageTabs').innerHTML=project.pages.map((_,i)=>`<button class="page-tab ${i===currentPageIndex?'active':''}" onclick="switchPage(${i})">ページ ${i+1}</button>`).join('')+`<button class="add-page-btn" onclick="addPage()">＋ ページ追加</button>`;
+  const tabs=project.pages.map((_,i)=>`
+    <button class="page-tab ${i===currentPageIndex?'active':''}" onclick="switchPage(${i})">ページ ${i+1}</button>
+  `).join('');
+  const delBtn=project.pages.length>1?`<button class="add-page-btn" onclick="deletePage()" style="color:var(--danger);border-color:var(--danger)">🗑 削除</button>`:'';
+  document.getElementById('pageTabs').innerHTML=tabs+`<button class="add-page-btn" onclick="addPage()">＋ ページ追加</button>`+delBtn;
 }
-function switchPage(i){currentPageIndex=i;renderPages();renderPhotoGrid()}
+function switchPage(i){currentPageIndex=i;renderPages();renderPhotoGrid();renderMiniMaps()}
 function addPage(){
   const project=projects[currentProjectId];
   project.pages.push(createNewPage());currentPageIndex=project.pages.length-1;
   saveCurrentProject();renderPages();renderPhotoGrid();showToast(`ページ ${project.pages.length} を追加しました`);
 }
+function deletePage(){
+  const project=projects[currentProjectId];
+  if(project.pages.length<=1){showToast('最低1ページは必要です');return}
+  if(!confirm(`ページ ${currentPageIndex+1} を削除しますか？このページの写真・データも削除されます。`))return;
+  project.pages.splice(currentPageIndex,1);
+  currentPageIndex=Math.min(currentPageIndex,project.pages.length-1);
+  saveCurrentProject();renderPages();renderPhotoGrid();renderMiniMaps();
+  showToast('ページを削除しました');
+}
 
-// ===== 写真グリッド =====
+// ===== 写真グリッド（6枚固定・自動改ページ）=====
 function renderPhotoGrid(){
   const project=projects[currentProjectId];
   const page=project.pages[currentPageIndex];
-  let sn=0;for(let i=0;i<currentPageIndex;i++)sn+=project.pages[i].cells.length;
+  // 6枚固定（不足分は空セルで補完）
+  while(page.cells.length<6)page.cells.push({index:page.cells.length,photo:null,comment:'',lat:null,lng:null,heading:null});
+  if(page.cells.length>6)page.cells=page.cells.slice(0,6);
+
+  let sn=0;for(let i=0;i<currentPageIndex;i++)sn+=6;
   document.getElementById('photoGrid').innerHTML=page.cells.map((cell,i)=>{
     const num=sn+i+1,hasPhoto=!!cell.photo,kn=toKanji(num);
     const meta=hasPhoto&&(cell.lat||cell.heading!==null)?`${cell.lat?`📍${cell.lat.toFixed(4)},${cell.lng.toFixed(4)}`:''}${cell.heading!==null?` ${headingToLabel(cell.heading)}`:''}`:''
     return `<div class="photo-cell">
-      <div class="photo-cell-header"><span>視点場${kn}</span><div class="cell-actions"><button class="cell-action-btn" onclick="openPhotoOptions(${i})">${hasPhoto?'変更':'追加'}</button>${page.cells.length>1?`<button class="cell-action-btn" onclick="removeCell(${i})" style="background:rgba(255,100,100,0.4)">×</button>`:''}</div></div>
+      <div class="photo-cell-header"><span>視点場${kn}</span><div class="cell-actions"><button class="cell-action-btn" onclick="openPhotoOptions(${i})">${hasPhoto?'変更':'追加'}</button></div></div>
       <div class="photo-slot ${hasPhoto?'has-photo':''}" onclick="openPhotoOptions(${i})">${hasPhoto?`<img src="${cell.photo}" alt="視点場${kn}"><div class="photo-meta">${escHtml(meta)}</div>`:''}
         <div class="slot-placeholder"><span class="icon">📷</span><span>タップして写真追加</span></div>
       </div>
       <div class="comment-area"><div class="comment-input-row">
-        <textarea id="comment_${i}" placeholder="コメントを入力" oninput="updateComment(${i},this.value)" rows="3">${escHtml(cell.comment)}</textarea>
+        <textarea id="comment_${i}" placeholder="コメントを入力" oninput="updateComment(${i},this.value)" rows="2">${escHtml(cell.comment)}</textarea>
         <button class="voice-btn" id="voiceBtn_${i}" onclick="toggleVoice(${i})" title="音声入力">🎤</button>
       </div></div>
     </div>`;
   }).join('');
 }
 
+// 写真追加時に6枚超えたら自動で次ページに移動
+function autoAddPageIfNeeded(){
+  const project=projects[currentProjectId];
+  const page=project.pages[currentPageIndex];
+  const photoCount=page.cells.filter(c=>c.photo).length;
+  if(photoCount>=6){
+    // 次ページがなければ追加
+    if(currentPageIndex===project.pages.length-1){
+      project.pages.push(createNewPage());
+    }
+    currentPageIndex++;
+    activeCellIndex=project.pages[currentPageIndex].cells.findIndex(c=>!c.photo);
+    if(activeCellIndex===-1)activeCellIndex=0;
+    saveCurrentProject();renderPages();renderPhotoGrid();renderMiniMaps();
+    showToast(`ページ ${currentPageIndex+1} に移動しました`);
+    return true;
+  }
+  return false;
+}
 function toKanji(n){const k=['①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩','⑪','⑫','⑬','⑭','⑮','⑯','⑰','⑱','⑲','⑳'];return k[n-1]||`(${n})`}
-function addPhotoCell(){
-  const p=projects[currentProjectId];const page=p.pages[currentPageIndex];
-  page.cells.push({index:page.cells.length,photo:null,comment:'',lat:null,lng:null,heading:null});
-  saveCurrentProject();renderPhotoGrid();showToast('視点場を追加しました');
-}
-function removeCell(i){
-  const p=projects[currentProjectId];const page=p.pages[currentPageIndex];
-  if(page.cells.length<=1){showToast('最低1枚は必要です');return}
-  page.cells.splice(i,1);saveCurrentProject();renderPhotoGrid();
-}
 function updateComment(i,v){projects[currentProjectId].pages[currentPageIndex].cells[i].comment=v;saveCurrentProject()}
 function saveHeader(){
   if(!currentProjectId)return;
@@ -639,6 +665,8 @@ function handleFileInput(e){
   const file=e.target.files[0];if(!file)return;
   const reader=new FileReader();
   reader.onload=ev=>{
+    // 自動改ページチェック（6枚満杯なら次ページへ）
+    autoAddPageIfNeeded();
     const cell=projects[currentProjectId].pages[currentPageIndex].cells[activeCellIndex];
     cell.photo=ev.target.result;
     if(currentLat){cell.lat=currentLat;cell.lng=currentLng}
@@ -1079,18 +1107,40 @@ function renderDetailMiniMap(){
 }
 function updateDetailMiniMap(){
   if(!detailMiniMap)return;
-  detailMiniMap.eachLayer(l=>{if(l instanceof L.Marker||l instanceof L.Polyline)detailMiniMap.removeLayer(l)});
+  detailMiniMap.eachLayer(l=>{if(l instanceof L.Marker||l instanceof L.Polyline||l instanceof L.Polygon)detailMiniMap.removeLayer(l)});
   const project=projects[currentProjectId];
-  let sn=0;for(let i=0;i<currentPageIndex;i++)sn+=project.pages[i].cells.length;
+  let sn=0;for(let i=0;i<currentPageIndex;i++)sn+=6;
   project.pages[currentPageIndex].cells.forEach((cell,i)=>{
     if(!cell.photo||!cell.lat)return;
     const num=sn+i+1;
-    const icon=L.divIcon({className:'',html:`<div style="background:#E8671B;color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4)">${num}</div>`,iconSize:[20,20],iconAnchor:[10,10]});
-    L.marker([cell.lat,cell.lng],{icon}).addTo(detailMiniMap);
+    // 番号マーカー（ドラッグ可能）
+    const icon=L.divIcon({className:'',html:`<div style="background:#E8671B;color:white;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4);cursor:move">${num}</div>`,iconSize:[22,22],iconAnchor:[11,11]});
+    const marker=L.marker([cell.lat,cell.lng],{icon,draggable:true}).addTo(detailMiniMap);
+
+    // ドラッグで位置更新
+    marker.on('dragend',()=>{
+      const pos=marker.getLatLng();
+      cell.lat=pos.lat;cell.lng=pos.lng;
+      saveCurrentProject();
+      updateDetailMiniMap();
+      showToast(`視点場${num}の位置を更新しました`);
+    });
+
+    // ▲矢印（撮影方向）
     if(cell.heading!==null){
-      const rad=cell.heading*Math.PI/180,len=0.0002;
-      const endLat=cell.lat+len*Math.cos(rad),endLng=cell.lng+len*Math.sin(rad)/Math.cos(cell.lat*Math.PI/180);
-      L.polyline([[cell.lat,cell.lng],[endLat,endLng]],{color:'#E8671B',weight:2}).addTo(detailMiniMap);
+      const rad=cell.heading*Math.PI/180;
+      const len=0.0003;
+      const endLat=cell.lat+len*Math.cos(rad);
+      const endLng=cell.lng+len*Math.sin(rad)/Math.cos(cell.lat*Math.PI/180);
+      // 矢印の線
+      L.polyline([[cell.lat,cell.lng],[endLat,endLng]],{color:'#E8671B',weight:3}).addTo(detailMiniMap);
+      // ▲三角形マーカー
+      const arrowIcon=L.divIcon({
+        className:'',
+        html:`<div style="transform:rotate(${cell.heading}deg);font-size:14px;color:#E8671B;text-shadow:0 0 3px white;line-height:1">▲</div>`,
+        iconSize:[14,14],iconAnchor:[7,7]
+      });
+      L.marker([endLat,endLng],{icon:arrowIcon,interactive:false}).addTo(detailMiniMap);
     }
   });
 }
