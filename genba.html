@@ -317,13 +317,13 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
         </div>
         <div class="export-card" onclick="exportExcel()">
           <div class="export-icon">📊</div>
-          <h4>Excelデータ書き出し</h4>
-          <p>台帳データ（現場名・日付・視点場・コメント・GPS座標・撮影方向）をExcelファイルで保存します。</p>
+          <h4>写真台帳を書き出し（HTML）</h4>
+          <p>写真・コメント・ヘッダー情報を含む台帳HTMLを書き出します。ブラウザで開いて印刷・PDF保存できます。</p>
         </div>
-        <div class="export-card" onclick="exportPhotosZip()">
+        <div class="export-card" onclick="exportOriginalPhotos()">
           <div class="export-icon">🖼️</div>
-          <h4>写真を一括保存</h4>
-          <p>現場の全写真を連番ファイル名（視点場01.jpg など）でまとめてダウンロードします。</p>
+          <h4>オリジナル写真をPC保存（無圧縮）</h4>
+          <p>現場の全写真を元の画質のままPCに保存します。ファイル名は「現場名_視点場01.jpg」の形式です。</p>
         </div>
         <div class="export-card" onclick="exportMapImages()">
           <div class="export-icon">🗺️</div>
@@ -984,20 +984,116 @@ function exportExcel(){
   }
 }
 
-// 写真一括保存
-async function exportPhotosZip(){
+// 写真貼り込みHTML（Excelで開ける形式）書き出し
+async function exportExcel(){
+  try{
+    const project=projects[currentProjectId];
+    const siteName=(project.siteName||'現場台帳').replace(/[\/\\:*?"<>|]/g,'_');
+
+    // 全ページのHTMLテーブルを生成
+    let allPages='';
+    for(let pageIdx=0;pageIdx<project.pages.length;pageIdx++){
+      const page=project.pages[pageIdx];
+      const sn=pageIdx*6;
+
+      // 写真セルを2列×3行で生成
+      let photoRows='';
+      for(let row=0;row<3;row++){
+        let cells='';
+        for(let col=0;col<2;col++){
+          const i=row*2+col;
+          const cell=page.cells[i]||{photo:null,comment:''};
+          const num=sn+i+1;
+          const imgHtml=cell.photo?`<img src="${cell.photo}" style="width:100%;max-height:160px;object-fit:cover;display:block;">`:
+            `<div style="height:160px;background:#E8ECF2;display:flex;align-items:center;justify-content:center;color:#999;font-size:12px;">写真なし</div>`;
+          const gps=cell.lat?`GPS: ${cell.lat.toFixed(5)}, ${cell.lng.toFixed(5)}`:'';
+          const dir=cell.heading!==null?`方向: ${headingToLabel(cell.heading)}`:'';
+          cells+=`<td style="width:50%;border:1px solid #ccc;padding:4px;vertical-align:top;">
+            <div style="font-size:11px;font-weight:bold;background:#1B2A4A;color:white;padding:3px 6px;margin-bottom:4px;">視点場${toKanji(num)}</div>
+            ${imgHtml}
+            <div style="font-size:10px;color:#666;padding:2px 0;">${gps} ${dir}</div>
+            <div style="font-size:11px;padding:4px;min-height:40px;border-top:1px solid #eee;">${escHtml(cell.comment)}</div>
+          </td>`;
+        }
+        photoRows+=`<tr>${cells}</tr>`;
+      }
+
+      allPages+=`
+      <div style="page-break-after:always;padding:10px;">
+        <!-- ヘッダー -->
+        <table style="width:100%;border-collapse:collapse;margin-bottom:8px;font-size:12px;">
+          <tr style="background:#1B2A4A;color:white;">
+            <td colspan="6" style="padding:6px 10px;font-size:14px;font-weight:bold;">現場写真台帳　ページ${pageIdx+1}</td>
+          </tr>
+          <tr>
+            <td style="border:1px solid #ccc;padding:4px;background:#f5f5f5;width:80px;">現場名</td>
+            <td style="border:1px solid #ccc;padding:4px;" colspan="2">${escHtml(project.siteName||'')}</td>
+            <td style="border:1px solid #ccc;padding:4px;background:#f5f5f5;width:60px;">調査日</td>
+            <td style="border:1px solid #ccc;padding:4px;" colspan="2">${project.date||''}</td>
+          </tr>
+          <tr>
+            <td style="border:1px solid #ccc;padding:4px;background:#f5f5f5;">調査者名</td>
+            <td style="border:1px solid #ccc;padding:4px;" colspan="2">${escHtml(project.inspector||'')}</td>
+            <td style="border:1px solid #ccc;padding:4px;background:#f5f5f5;">天気</td>
+            <td style="border:1px solid #ccc;padding:4px;" colspan="2">${escHtml(project.weather||'')}</td>
+          </tr>
+          ${project.note?`<tr><td style="border:1px solid #ccc;padding:4px;background:#f5f5f5;">備考</td><td style="border:1px solid #ccc;padding:4px;" colspan="5">${escHtml(project.note)}</td></tr>`:''}
+        </table>
+        <!-- 写真グリッド -->
+        <table style="width:100%;border-collapse:collapse;">
+          ${photoRows}
+        </table>
+        <div style="font-size:9px;color:#999;text-align:right;margin-top:4px;">©国土地理院</div>
+      </div>`;
+    }
+
+    // HTMLファイルとして書き出し（Excelで開ける）
+    const html=`<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<style>
+  body{font-family:Arial,sans-serif;margin:0;padding:10px;}
+  img{max-width:100%;}
+  @media print{.no-print{display:none}}
+</style></head>
+<body>${allPages}</body></html>`;
+
+    const blob=new Blob([html],{type:'text/html;charset=utf-8'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=`${siteName}_写真台帳.html`;
+    document.body.appendChild(a);a.click();
+    document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+    closeModal('exportModal');
+    showToast('写真台帳HTMLを書き出しました（ブラウザで開いて印刷可能）');
+  }catch(e){
+    showToast('書き出しエラー: '+e.message);
+    console.error(e);
+  }
+}
+
+// オリジナル写真をPCに保存（無圧縮）
+async function exportOriginalPhotos(){
   const project=projects[currentProjectId];
+  const siteName=(project.siteName||'現場台帳').replace(/[\/\\:*?"<>|]/g,'_');
   let count=0;
-  let sn=0;
   for(let pageIdx=0;pageIdx<project.pages.length;pageIdx++){
     const page=project.pages[pageIdx];
+    const sn=pageIdx*6;
     for(let ci=0;ci<page.cells.length;ci++){
       const cell=page.cells[ci];
       if(!cell.photo)continue;
       const num=sn+ci+1;
-      const filename=`視点場${String(num).padStart(2,'0')}.jpg`;
-      // base64をBlobに変換してダウンロード
-      const base64=cell.photo.split(',')[1];
+      const filename=`${siteName}_視点場${String(num).padStart(2,'0')}.jpg`;
+      await downloadPhoto(cell.photo,filename);
+      count++;
+      await new Promise(r=>setTimeout(r,600));
+    }
+  }
+  closeModal('exportModal');
+  showToast(`オリジナル写真${count}枚を保存しました`);
+}
       const byteStr=atob(base64);
       const arr=new Uint8Array(byteStr.length);
       for(let i=0;i<byteStr.length;i++)arr[i]=byteStr.charCodeAt(i);
@@ -1126,19 +1222,20 @@ function updateDetailMiniMap(){
       showToast(`視点場${num}の位置を更新しました`);
     });
 
-    // ▲矢印（撮影方向）
+    // ▲矢印（撮影方向）SVGで描画
     if(cell.heading!==null){
       const rad=cell.heading*Math.PI/180;
-      const len=0.0003;
+      const len=0.0004;
       const endLat=cell.lat+len*Math.cos(rad);
       const endLng=cell.lng+len*Math.sin(rad)/Math.cos(cell.lat*Math.PI/180);
       // 矢印の線
-      L.polyline([[cell.lat,cell.lng],[endLat,endLng]],{color:'#E8671B',weight:3}).addTo(detailMiniMap);
-      // ▲三角形マーカー
+      L.polyline([[cell.lat,cell.lng],[endLat,endLng]],{color:'#E8671B',weight:3,opacity:1}).addTo(detailMiniMap);
+      // ▲先端マーカー（SVG）
       const arrowIcon=L.divIcon({
         className:'',
-        html:`<div style="transform:rotate(${cell.heading}deg);font-size:14px;color:#E8671B;text-shadow:0 0 3px white;line-height:1">▲</div>`,
-        iconSize:[14,14],iconAnchor:[7,7]
+        html:`<svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg" style="transform:rotate(${cell.heading}deg);transform-origin:center;overflow:visible"><polygon points="10,2 16,18 10,14 4,18" fill="#E8671B" stroke="white" stroke-width="1.5"/></svg>`,
+        iconSize:[20,20],
+        iconAnchor:[10,10]
       });
       L.marker([endLat,endLng],{icon:arrowIcon,interactive:false}).addTo(detailMiniMap);
     }
