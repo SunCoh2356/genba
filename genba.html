@@ -574,8 +574,50 @@ async function openProject(id){
   document.getElementById('fieldInspector').value=project.inspector||'';
   document.getElementById('fieldWeather').value=project.weather||'';
   document.getElementById('fieldNote').value=project.note||'';
-  showScreen('screen-ledger');startGPS();startCompass();
+  showScreen('screen-ledger');
+  startGPS();startCompass();
   renderPages();renderPhotoGrid();renderMiniMaps();
+  // 地図未設定の場合はGPSから自動設定
+  if(!project.mapData.detail){
+    autoSetMapFromGPS();
+  }
+}
+
+// GPS位置から地図を自動設定
+function autoSetMapFromGPS(){
+  const project=projects[currentProjectId];
+  if(!project)return;
+  // GPS取得済みなら即設定
+  if(currentLat){
+    setMapFromPosition(currentLat,currentLng);
+    return;
+  }
+  // GPS待ち（最大10秒）
+  showToast('GPS位置から地図を自動設定中...');
+  let attempts=0;
+  const timer=setInterval(()=>{
+    attempts++;
+    if(currentLat){
+      clearInterval(timer);
+      setMapFromPosition(currentLat,currentLng);
+    }else if(attempts>=20){
+      clearInterval(timer);
+      showToast('GPS取得できませんでした。「地図編集」から手動設定してください。');
+    }
+  },500);
+}
+
+function setMapFromPosition(lat,lng){
+  const project=projects[currentProjectId];
+  if(!project)return;
+  const scale=project.mapData.overviewScale||4;
+  // 視点場図：GPS位置中心・ズーム17
+  project.mapData.detail={centerLat:lat,centerLng:lng,zoom:17};
+  // 俯瞰図：同じ位置中心・scale分広域
+  project.mapData.overview={centerLat:lat,centerLng:lng,zoom:Math.max(10,17-scale)};
+  saveCurrentProject();
+  renderMiniMaps();
+  showToast('地図を自動設定しました（「地図編集」で調整できます）');
 }
 
 // ===== ページ =====
