@@ -9,7 +9,7 @@
 <title>現場台帳</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+
 <style>
 :root{--navy:#1B2A4A;--orange:#E8671B;--orange-light:#F5874A;--bg:#F2F4F7;--border:#D0D5DD;--text:#1A1A2E;--text-sub:#5A6478;--danger:#D93025;--cell-bg:#E8ECF2;--radius:8px;--shadow:0 2px 8px rgba(0,0,0,0.12)}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -699,51 +699,58 @@ async function exportAll(){
   },300);
 }
 
-// Excel書き出し
+// Excel書き出し（CSV形式、Excelで開ける）
 function exportExcel(){
-  const project=projects[currentProjectId];
-  const wb=XLSX.utils.book_new();
+  try{
+    const project=projects[currentProjectId];
+    const rows=[];
+    // BOM付きUTF-8でExcelが文字化けしないようにする
+    rows.push(['現場台帳']);
+    rows.push([]);
+    rows.push(['現場名',project.siteName||'']);
+    rows.push(['調査日',project.date||'']);
+    rows.push(['調査者名',project.inspector||'']);
+    rows.push(['天気',project.weather||'']);
+    rows.push(['備考',project.note||'']);
+    rows.push([]);
+    rows.push(['視点場番号','ページ','コメント','緯度','経度','撮影方向','写真ファイル名']);
 
-  // ヘッダー情報シート
-  const headerData=[
-    ['現場台帳'],[''],
-    ['現場名',project.siteName||''],
-    ['調査日',project.date||''],
-    ['調査者名',project.inspector||''],
-    ['天気',project.weather||''],
-    ['備考',project.note||''],
-    [''],
-    ['視点場番号','ページ','コメント','緯度','経度','撮影方向','写真ファイル名']
-  ];
-
-  let rowNum=0;
-  project.pages.forEach((page,pageIdx)=>{
-    let sn=0;
-    for(let i=0;i<pageIdx;i++)sn+=project.pages[i].cells.length;
-    page.cells.forEach((cell,cellIdx)=>{
-      if(!cell.photo&&!cell.comment&&!cell.lat)return;
-      const num=sn+cellIdx+1;
-      rowNum++;
-      headerData.push([
-        `視点場${num}`,
-        `ページ${pageIdx+1}`,
-        cell.comment||'',
-        cell.lat||'',
-        cell.lng||'',
-        cell.heading!==null?headingToLabel(cell.heading):'',
-        cell.photo?`視点場${String(num).padStart(2,'0')}.jpg`:''
-      ]);
+    project.pages.forEach((page,pageIdx)=>{
+      let sn=0;for(let i=0;i<pageIdx;i++)sn+=project.pages[i].cells.length;
+      page.cells.forEach((cell,cellIdx)=>{
+        const num=sn+cellIdx+1;
+        rows.push([
+          `視点場${num}`,
+          `ページ${pageIdx+1}`,
+          cell.comment||'',
+          cell.lat!=null?cell.lat:'',
+          cell.lng!=null?cell.lng:'',
+          cell.heading!=null?headingToLabel(cell.heading):'',
+          cell.photo?`視点場${String(num).padStart(2,'0')}.jpg`:''
+        ]);
+      });
     });
-  });
 
-  const ws=XLSX.utils.aoa_to_sheet(headerData);
-  ws['!cols']=[{wch:12},{wch:10},{wch:40},{wch:15},{wch:15},{wch:12},{wch:20}];
-  XLSX.utils.book_append_sheet(wb,'台帳データ',ws);
+    // CSV文字列生成
+    const csv=rows.map(row=>row.map(cell=>{
+      const s=String(cell);
+      return s.includes(',')||s.includes('"')||s.includes('\n')?`"${s.replace(/"/g,'""')}"`:s;
+    }).join(',')).join('\n');
 
-  const filename=`${project.siteName||'現場台帳'}_${project.date||'日付未設定'}.xlsx`;
-  XLSX.writeFile(wb,filename);
-  closeModal('exportModal');
-  showToast('Excelを書き出しました');
+    // BOM付きUTF-8でダウンロード
+    const bom='\uFEFF';
+    const blob=new Blob([bom+csv],{type:'text/csv;charset=utf-8'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    const filename=`${(project.siteName||'現場台帳').replace(/[\/\\:*?"<>|]/g,'_')}_${project.date||'日付未設定'}.csv`;
+    a.href=url;a.download=filename;
+    document.body.appendChild(a);a.click();
+    document.body.removeChild(a);URL.revokeObjectURL(url);
+    closeModal('exportModal');
+    showToast('CSVを書き出しました（Excelで開けます）');
+  }catch(e){
+    showToast('書き出しエラー: '+e.message);
+  }
 }
 
 // 写真一括保存
