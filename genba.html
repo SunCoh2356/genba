@@ -268,6 +268,25 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
   </div>
 </div>
 
+<!-- 位置・方向調整画面 -->
+<div class="screen" id="screen-adjust">
+  <div class="app-header">
+    <button class="back-btn" onclick="cancelAdjustment()">← 戻る</button>
+    <h1>位置・方向を調整</h1>
+    <button class="btn btn-primary btn-sm" onclick="saveAdjustment()">保存</button>
+  </div>
+  <div style="background:rgba(27,42,74,0.95);padding:8px 12px;display:flex;align-items:center;gap:8px">
+    <span style="color:white;font-size:12px;white-space:nowrap">撮影方向</span>
+    <input type="range" id="directionSlider" min="0" max="359" value="0" oninput="updateDirectionPreview()"
+      style="flex:1;-webkit-appearance:none;height:6px;border-radius:3px;background:rgba(255,255,255,0.3);outline:none">
+    <span style="color:var(--orange-light);font-size:12px;font-weight:700;min-width:55px;text-align:center" id="directionPreview">N 0°</span>
+  </div>
+  <p style="font-size:12px;color:var(--text-sub);text-align:center;padding:6px">マーカーをドラッグして位置を調整・スライダーで方向を調整</p>
+  <div style="position:absolute;top:145px;left:0;right:0;bottom:0">
+    <div id="adjustMap" style="width:100%;height:100%"></div>
+  </div>
+</div>
+
 <!-- 視点場位置・方向編集（独立画面） -->
 <div class="screen" id="screen-detail-edit">
   <div class="app-header">
@@ -397,23 +416,7 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
 </div>
 
 <!-- 位置・方向調整モーダル -->
-<div class="modal-overlay" id="adjustModal">
-  <div class="modal">
-    <div class="modal-handle"></div>
-    <h3>位置・方向を調整</h3>
-    <p class="adjust-info">マーカーをドラッグして位置を調整してください</p>
-    <div class="adjust-map-wrap"><div id="adjustMap"></div></div>
-    <div class="direction-control">
-      <label>撮影方向</label>
-      <input type="range" class="direction-slider" id="directionSlider" min="0" max="359" value="0" oninput="updateDirectionPreview()">
-      <div class="direction-preview" id="directionPreview">N 0°</div>
-    </div>
-    <div class="confirm-btns">
-      <button class="btn btn-secondary" onclick="closeModal('adjustModal')">キャンセル</button>
-      <button class="btn btn-primary" onclick="saveAdjustment()">保存</button>
-    </div>
-  </div>
-</div>
+
 
 <!-- 削除確認モーダル -->
 <div class="modal-overlay" id="deleteModal">
@@ -436,6 +439,10 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
 let db=null,currentProjectId=null,currentPageIndex=0,activeCellIndex=null,projects={},isOnlineMode=true;
 let currentLat=null,currentLng=null,currentHeading=null,gpsWatchId=null;
 let fullMap=null,adjustMap=null,adjustMarker=null,currentMapTarget=null;
+let adjustArrowLine=null,adjustArrowHead=null;
+// キャンセル用バックアップ
+let backupMapData=null;
+let backupCellData=null;
 let overviewMiniMap=null,detailMiniMap=null;
 let recognition=null,isRecording=false,recordingCellIndex=null;
 
@@ -1264,11 +1271,13 @@ function openMapModal(target){
   // 台帳画面全体を非表示（Leafletがz-indexを無視するため）
   document.querySelector('.ledger-screen').style.display='none';
   document.querySelector('.action-bar').style.display='none';
+  // バックアップ保存
+  const project=projects[currentProjectId];
+  backupMapData=JSON.parse(JSON.stringify(project.mapData));
   currentMapTarget=target;
   const isOverview=target==='overview';
   document.getElementById('mapModalTitle').textContent=isOverview?'俯瞰図の範囲を設定':'視点場の範囲を設定';
   document.getElementById('overviewScaleBar').style.display=isOverview?'flex':'none';
-  const project=projects[currentProjectId];
   const scaleVal=project.mapData.overviewScale||4;
   document.getElementById('overviewScaleSlider').value=scaleVal;
   document.getElementById('overviewScaleLabel').textContent=`×${scaleVal}`;
@@ -1303,10 +1312,17 @@ function updateOverviewScale(){
 }
 function closeMapModal(){
   document.getElementById('mapModal').classList.remove('open');
+  // バックアップに戻す（キャンセル）
+  if(backupMapData){
+    projects[currentProjectId].mapData=backupMapData;
+    backupMapData=null;
+    saveCurrentProject();
+  }
   // 台帳画面を再表示
   document.querySelector('.ledger-screen').style.display='block';
   document.querySelector('.action-bar').style.display='grid';
   document.querySelectorAll('.map-canvas-wrap').forEach(el=>el.style.visibility='visible');
+  renderMiniMaps();
 }
 function centerOnGPS(){
   if(!currentLat){showToast('GPS位置を取得中です。少々お待ちください。');return}
@@ -1315,6 +1331,7 @@ function centerOnGPS(){
 function confirmMapArea(){
   const center=fullMap.getCenter(),zoom=fullMap.getZoom();
   projects[currentProjectId].mapData[currentMapTarget]={centerLat:center.lat,centerLng:center.lng,zoom};
+  backupMapData=null; // 確定したのでバックアップをクリア
   saveCurrentProject();closeMapModal();renderMiniMaps();showToast('地図範囲を保存しました');
 }
 
@@ -1401,6 +1418,8 @@ function openDetailEditModal(){
   const page=project.pages[currentPageIndex];
   const data=project.mapData.detail;
   activeEditCellIndex=0;
+  // バックアップ保存（全セルの位置・方向）
+  backupCellData=page.cells.map(c=>({lat:c.lat,lng:c.lng,heading:c.heading}));
   const sn=currentPageIndex*6;
   document.getElementById('detailEditTabs').innerHTML=page.cells.map((cell,i)=>{
     const num=sn+i+1;
@@ -1516,6 +1535,7 @@ function updateDetailEditDirection(){
 }
 
 function saveDetailEdit(){
+  backupCellData=null; // 確定
   saveCurrentProject();
   closeDetailEditModal();
   updateDetailMiniMap();
@@ -1523,6 +1543,18 @@ function saveDetailEdit(){
 }
 
 function closeDetailEditModal(){
+  // キャンセル：バックアップに戻す
+  if(backupCellData){
+    const page=projects[currentProjectId].pages[currentPageIndex];
+    page.cells.forEach((cell,i)=>{
+      if(backupCellData[i]){
+        cell.lat=backupCellData[i].lat;
+        cell.lng=backupCellData[i].lng;
+        cell.heading=backupCellData[i].heading;
+      }
+    });
+    backupCellData=null;
+  }
   if(detailEditMap){detailEditMap.remove();detailEditMap=null;}
   detailEditMarkers=[];detailEditArrows=[];
   showScreen('screen-ledger');
@@ -1531,23 +1563,75 @@ function closeDetailEditModal(){
 function openAdjustModal(){
   closeModal('photoModal');
   const cell=projects[currentProjectId].pages[currentPageIndex].cells[activeCellIndex];
+  // バックアップ保存
+  backupCellData={lat:cell.lat,lng:cell.lng,heading:cell.heading};
   const lat=cell.lat||currentLat||35.6762,lng=cell.lng||currentLng||139.6503;
-  openModal('adjustModal');
-  document.getElementById('directionSlider').value=cell.heading||0;updateDirectionPreview();
+
+  // スライダー設定
+  document.getElementById('directionSlider').value=cell.heading||0;
+  updateDirectionPreview();
+
+  // 独立画面に切り替え
+  showScreen('screen-adjust');
+
+  if(adjustMap){adjustMap.remove();adjustMap=null;}
+
   setTimeout(()=>{
-    if(adjustMap){adjustMap.remove();adjustMap=null}
     adjustMap=L.map('adjustMap').setView([lat,lng],17);
-    L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',{maxZoom:18}).addTo(adjustMap);
+    L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',{maxZoom:18,attribution:'©国土地理院'}).addTo(adjustMap);
     adjustMarker=L.marker([lat,lng],{draggable:true}).addTo(adjustMap);
     adjustMap.invalidateSize();
-  },200);
+    drawAdjustArrow(lat,lng,cell.heading||0);
+    adjustMarker.on('drag',()=>{
+      const pos=adjustMarker.getLatLng();
+      drawAdjustArrow(pos.lat,pos.lng,parseInt(document.getElementById('directionSlider').value));
+    });
+  },300);
 }
-function updateDirectionPreview(){document.getElementById('directionPreview').textContent=headingToLabel(parseInt(document.getElementById('directionSlider').value))}
+
+function cancelAdjustment(){
+  // バックアップに戻す
+  if(backupCellData){
+    const cell=projects[currentProjectId].pages[currentPageIndex].cells[activeCellIndex];
+    cell.lat=backupCellData.lat;
+    cell.lng=backupCellData.lng;
+    cell.heading=backupCellData.heading;
+    backupCellData=null;
+  }
+  if(adjustMap){adjustMap.remove();adjustMap=null;}
+  showScreen('screen-ledger');
+}
+
+function drawAdjustArrow(lat,lng,heading){
+  if(adjustArrowLine)try{adjustMap.removeLayer(adjustArrowLine)}catch(e){}
+  if(adjustArrowHead)try{adjustMap.removeLayer(adjustArrowHead)}catch(e){}
+  const rad=heading*Math.PI/180,len=0.0004;
+  const endLat=lat+len*Math.cos(rad),endLng=lng+len*Math.sin(rad)/Math.cos(lat*Math.PI/180);
+  adjustArrowLine=L.polyline([[lat,lng],[endLat,endLng]],{color:'#E8671B',weight:3}).addTo(adjustMap);
+  const arrowIcon=L.divIcon({
+    className:'',
+    html:`<svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg" style="transform:rotate(${heading}deg);transform-origin:center;overflow:visible"><polygon points="10,2 16,18 10,14 4,18" fill="#E8671B" stroke="white" stroke-width="1.5"/></svg>`,
+    iconSize:[20,20],iconAnchor:[10,10]
+  });
+  adjustArrowHead=L.marker([endLat,endLng],{icon:arrowIcon,interactive:false}).addTo(adjustMap);
+}
+function updateDirectionPreview(){
+  const val=parseInt(document.getElementById('directionSlider').value);
+  document.getElementById('directionPreview').textContent=headingToLabel(val);
+  if(adjustMap&&adjustMarker){
+    const pos=adjustMarker.getLatLng();
+    drawAdjustArrow(pos.lat,pos.lng,val);
+  }
+}
 function saveAdjustment(){
   const cell=projects[currentProjectId].pages[currentPageIndex].cells[activeCellIndex];
   const pos=adjustMarker.getLatLng();
   cell.lat=pos.lat;cell.lng=pos.lng;cell.heading=parseInt(document.getElementById('directionSlider').value);
-  saveCurrentProject();renderPhotoGrid();updateDetailMiniMap();closeModal('adjustModal');showToast('位置・方向を保存しました');
+  saveCurrentProject();renderPhotoGrid();updateDetailMiniMap();
+  if(adjustMap){adjustMap.remove();adjustMap=null;}
+  showScreen('screen-ledger');
+  renderMiniMaps();
+  showToast('位置・方向を保存しました');
 }
 
 // ===== 削除 =====
