@@ -1107,24 +1107,6 @@ async function exportOriginalPhotos(){
   closeModal('exportModal');
   showToast(`オリジナル写真${count}枚を保存しました`);
 }
-      const byteStr=atob(base64);
-      const arr=new Uint8Array(byteStr.length);
-      for(let i=0;i<byteStr.length;i++)arr[i]=byteStr.charCodeAt(i);
-      const blob=new Blob([arr],{type:'image/jpeg'});
-      const url=URL.createObjectURL(blob);
-      const a=document.createElement('a');
-      a.href=url;a.download=filename;
-      document.body.appendChild(a);a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      count++;
-      await new Promise(r=>setTimeout(r,300));// 連続DL対策
-    }
-    sn+=page.cells.length;
-  }
-  closeModal('exportModal');
-  showToast(`${count}枚の写真を保存しました`);
-}
 
 // PDF印刷
 function printPDF(){
