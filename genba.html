@@ -7,8 +7,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="現場台帳">
 <title>現場台帳</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://unpkg.com/leaflet-image@0.4.0/leaflet-image.js"></script>
 
 <style>
@@ -547,7 +547,7 @@ async function renderProjectList(){
 
 // ===== 新規現場 =====
 function openNewProjectModal(){
-  document.getElementById('newDate').value=new Date().toISOString().split('T')[0];
+  document.getElementById('newDate').value=getLocalDateString();
   document.getElementById('newSiteName').value='';document.getElementById('newInspector').value='';
   openModal('newProjectModal');setTimeout(()=>document.getElementById('newSiteName').focus(),300);
 }
@@ -567,6 +567,20 @@ async function openProject(id){
   const project=all.find(p=>p.id===id);if(!project)return;
   if(!project.mapData)project.mapData={overview:null,detail:null,overviewScale:4};
   if(!project.mapData.overviewScale)project.mapData.overviewScale=4;
+
+  // 前の現場の地図オブジェクトを破棄（表示のみリセット、データは消さない）
+  if(overviewMiniMap){overviewMiniMap.remove();overviewMiniMap=null;}
+  if(detailMiniMap){detailMiniMap.remove();detailMiniMap=null;}
+  if(fullMap){fullMap.remove();fullMap=null;}
+
+  // GPS・センサーをリセット
+  if(gpsWatchId){navigator.geolocation.clearWatch(gpsWatchId);gpsWatchId=null;}
+  currentLat=null;currentLng=null;currentHeading=null;
+  document.getElementById('gpsDot').className='s-dot';
+  document.getElementById('gpsLabel').textContent='GPS待機中';
+  document.getElementById('compassDot').className='s-dot';
+  document.getElementById('compassLabel').textContent='コンパス待機中';
+
   currentProjectId=id;currentPageIndex=0;projects[id]=project;
   document.getElementById('ledgerTitle').textContent=project.siteName||'台帳';
   document.getElementById('fieldSiteName').value=project.siteName||'';
@@ -574,10 +588,14 @@ async function openProject(id){
   document.getElementById('fieldInspector').value=project.inspector||'';
   document.getElementById('fieldWeather').value=project.weather||'';
   document.getElementById('fieldNote').value=project.note||'';
+
   showScreen('screen-ledger');
   startGPS();startCompass();
-  renderPages();renderPhotoGrid();renderMiniMaps();
-  // 地図未設定の場合はGPSから自動設定
+  renderPages();renderPhotoGrid();
+  // データに基づいて地図を描画（データは消さない）
+  renderMiniMaps();
+
+  // 地図未設定の場合のみGPSから自動設定
   if(!project.mapData.detail){
     autoSetMapFromGPS();
   }
@@ -911,6 +929,18 @@ async function exportAll(){
   progress.style.display='none';
   closeModal('exportModal');
   showToast(`CSV＋地図画像＋写真${totalPhotos}枚を書き出しました`);
+
+  // 全データ削除確認
+  setTimeout(()=>{
+    if(confirm('PCへの書き出しが完了しました。\nアプリ内のこの現場データを全て削除しますか？\n\n（JSONと写真はPCに保存済みです）')){
+      const id=currentProjectId;
+      deleteProjectDB(id).then(()=>{
+        delete projects[id];
+        goBack();
+        showToast('現場データをアプリから削除しました');
+      });
+    }
+  },500);
 }
 
 // JSONエクスポート（iPhone→PC転送用）
@@ -970,7 +1000,13 @@ function initImport(){
   };
 }
 
-// CSV生成コア
+function getLocalDateString(){
+  const d=new Date();
+  const y=d.getFullYear();
+  const m=String(d.getMonth()+1).padStart(2,'0');
+  const day=String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
 function buildCsvBlob(){
   const project=projects[currentProjectId];
   const rows=[];
@@ -1170,6 +1206,20 @@ async function exportOriginalPhotos(){
   }
   closeModal('exportModal');
   showToast(`オリジナル写真${count}枚を保存しました`);
+
+  // 保存完了後に削除確認
+  if(count>0){
+    setTimeout(()=>{
+      if(confirm(`${count}枚の写真をPCに保存しました。\nアプリ内のこの現場データを全て削除しますか？\n\n※JSONエクスポートも済んでいる場合のみ削除してください`)){
+        const id=currentProjectId;
+        deleteProjectDB(id).then(()=>{
+          delete projects[id];
+          goBack();
+          showToast('現場データをアプリから削除しました');
+        });
+      }
+    },500);
+  }
 }
 
 // PDF印刷
