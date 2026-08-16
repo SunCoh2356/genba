@@ -871,34 +871,38 @@ function exportJson(){
 function initImport(){
   const input=document.getElementById('importInput');
   if(!input)return;
-  input.onchange=async function(){
+  input.onchange=function(){
     const file=this.files[0];
+    const inputEl=this;
     if(!file)return;
     showToast('取込中...');
-    try{
-      const text=await file.text();
-      const project=JSON.parse(text);
-      if(!project.id||!project.pages){
-        showToast('このファイルは現場台帳データではありません');
-        this.value='';return;
+    const reader=new FileReader();
+    reader.onload=function(e){
+      try{
+        const project=JSON.parse(e.target.result);
+        if(!project.id||!project.pages){
+          showToast('このファイルは現場台帳データではありません');
+          inputEl.value='';return;
+        }
+        if(!project.mapData)project.mapData={overview:null,detail:null,overviewScale:4};
+        loadAllProjects().then(all=>{
+          const exists=all.find(p=>p.id===project.id);
+          if(exists){
+            project.id='proj_'+Date.now();
+            project.siteName=(project.siteName||'')+'（取込）';
+          }
+          saveProject(project).then(()=>{
+            renderProjectList();
+            showToast(`「${project.siteName}」を取り込みました`);
+          });
+        });
+      }catch(e){
+        showToast('取込エラー: ファイルが正しくありません');
+        console.error(e);
       }
-      // 既存データと重複する場合は新しいIDを付与
-      const all=await loadAllProjects();
-      const exists=all.find(p=>p.id===project.id);
-      if(exists){
-        project.id='proj_'+Date.now();
-        project.siteName=(project.siteName||'')+'（取込）';
-      }
-      // mapDataがない場合は初期化
-      if(!project.mapData)project.mapData={overview:null,detail:null,overviewScale:4};
-      await saveProject(project);
-      await renderProjectList();
-      showToast(`「${project.siteName}」を取り込みました`);
-    }catch(e){
-      showToast('取込エラー: '+e.message);
-      console.error(e);
-    }
-    this.value='';
+      inputEl.value='';
+    };
+    reader.readAsText(file);
   };
 }
 
