@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="現場台帳">
+<title>現場台帳</title>
+<style>
+  :root {
+    --navy: #1B2A4A;
+    --orange: #E8671B;
+    --orange-light: #F5874A;
+    --bg: #F2F4F7;
+    --white: #FFFFFF;
+    --border: #D0D5DD;
+    --text: #1A1A2E;
+    --text-sub: #5A6478;
+    --danger: #D93025;
+    --success: #2E7D32;
+    --cell-bg: #E8ECF2;
+    --radius: 8px;
+    --shadow: 0 2px 8px rgba(0,0,0,0.12);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ===== ヘッダーナビ ===== */
+  .app-header {
+    background: var(--navy);
+    color: white;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+  .app-header h1 { font-size: 18px; font-weight: 700; letter-spacing: 0.5px; }
+  .app-header .back-btn {
+    background: none; border: none; color: var(--orange-light);
+    font-size: 15px; padding: 8px 0; cursor: pointer; display: flex; align-items: center; gap: 4px;
+  }
+  .app-header .header-right { display: flex; gap: 8px; align-items: center; }
+
+  /* ===== ボタン共通 ===== */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 12px 20px; border-radius: var(--radius); border: none;
+    font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.15s;
+    min-height: 48px;
+  }
+  .btn-primary { background: var(--orange); color: white; }
+  .btn-primary:active { background: #c5541a; transform: scale(0.98); }
+  .btn-secondary { background: white; color: var(--navy); border: 2px solid var(--navy); }
+  .btn-secondary:active { background: var(--bg); }
+  .btn-danger { background: var(--danger); color: white; }
+  .btn-ghost { background: none; border: none; color: var(--text-sub); font-size: 14px; padding: 8px; }
+  .btn-sm { padding: 8px 14px; font-size: 13px; min-height: 36px; }
+  .btn-full { width: 100%; }
+
+  /* ===== 画面切替 ===== */
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+  /* ===== 現場一覧画面 ===== */
+  .list-screen { padding: 16px; }
+  .list-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 16px;
+  }
+  .list-header h2 { font-size: 20px; font-weight: 700; color: var(--navy); }
+  .list-count { font-size: 13px; color: var(--text-sub); margin-top: 2px; }
+
+  .project-card {
+    background: white; border-radius: var(--radius); padding: 16px;
+    margin-bottom: 12px; box-shadow: var(--shadow);
+    border-left: 4px solid var(--orange);
+    cursor: pointer; transition: transform 0.1s;
+  }
+  .project-card:active { transform: scale(0.99); }
+  .project-card h3 { font-size: 16px; font-weight: 700; color: var(--navy); margin-bottom: 6px; }
+  .project-card-meta { display: flex; gap: 12px; flex-wrap: wrap; }
+  .project-card-meta span { font-size: 13px; color: var(--text-sub); }
+  .project-card-meta .badge {
+    background: var(--cell-bg); color: var(--navy);
+    padding: 2px 8px; border-radius: 20px; font-size: 12px; font-weight: 600;
+  }
+
+  .empty-state {
+    text-align: center; padding: 60px 20px; color: var(--text-sub);
+  }
+  .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+  .empty-state p { font-size: 15px; margin-bottom: 20px; }
+
+  /* ===== モーダル ===== */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+    z-index: 200; display: flex; align-items: flex-end;
+    opacity: 0; pointer-events: none; transition: opacity 0.2s;
+  }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+  .modal {
+    background: white; border-radius: 20px 20px 0 0;
+    width: 100%; padding: 20px 16px 40px;
+    transform: translateY(100%); transition: transform 0.25s ease;
+    max-height: 90vh; overflow-y: auto;
+  }
+  .modal-overlay.open .modal { transform: translateY(0); }
+  .modal h3 { font-size: 18px; font-weight: 700; color: var(--navy); margin-bottom: 20px; text-align: center; }
+  .modal-handle {
+    width: 40px; height: 4px; background: var(--border);
+    border-radius: 2px; margin: 0 auto 16px;
+  }
+
+  /* ===== フォーム ===== */
+  .form-group { margin-bottom: 16px; }
+  .form-group label {
+    display: block; font-size: 13px; font-weight: 600;
+    color: var(--text-sub); margin-bottom: 6px; letter-spacing: 0.3px;
+  }
+  .form-group label .required { color: var(--danger); margin-left: 2px; }
+  .form-control {
+    width: 100%; padding: 12px 14px; border: 2px solid var(--border);
+    border-radius: var(--radius); font-size: 16px; color: var(--text);
+    background: white; transition: border-color 0.15s;
+    -webkit-appearance: none;
+  }
+  .form-control:focus { outline: none; border-color: var(--navy); }
+  select.form-control { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%235A6478' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 36px; }
+
+  /* ===== 台帳編集画面 ===== */
+  .ledger-screen { padding-bottom: 100px; }
+
+  /* ヘッダー情報 */
+  .ledger-header-section {
+    background: white; margin: 12px; border-radius: var(--radius);
+    box-shadow: var(--shadow); overflow: hidden;
+  }
+  .ledger-header-section .section-title {
+    background: var(--navy); color: white;
+    padding: 10px 16px; font-size: 13px; font-weight: 700; letter-spacing: 0.5px;
+  }
+  .header-fields { padding: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .header-field-full { grid-column: 1 / -1; }
+  .header-field label { font-size: 11px; font-weight: 600; color: var(--text-sub); margin-bottom: 4px; display: block; }
+  .header-field input, .header-field select {
+    width: 100%; padding: 10px 12px; border: 1.5px solid var(--border);
+    border-radius: 6px; font-size: 15px; background: white;
+    -webkit-appearance: none;
+  }
+  .header-field input:focus, .header-field select:focus { outline: none; border-color: var(--navy); }
+
+  /* ページタブ */
+  .page-tabs {
+    display: flex; gap: 8px; padding: 12px 12px 0;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+  }
+  .page-tab {
+    flex-shrink: 0; padding: 8px 16px; border-radius: var(--radius) var(--radius) 0 0;
+    border: 2px solid var(--border); border-bottom: none;
+    background: var(--cell-bg); font-size: 13px; font-weight: 600;
+    color: var(--text-sub); cursor: pointer;
+  }
+  .page-tab.active { background: white; color: var(--navy); border-color: var(--navy); }
+  .add-page-btn {
+    flex-shrink: 0; padding: 8px 12px; border-radius: var(--radius) var(--radius) 0 0;
+    border: 2px dashed var(--border); border-bottom: none;
+    background: none; font-size: 13px; color: var(--text-sub); cursor: pointer;
+  }
+
+  /* A4横レイアウト */
+  .a4-container {
+    margin: 0 12px; background: white;
+    border: 2px solid var(--navy); border-radius: 0 var(--radius) var(--radius) var(--radius);
+    box-shadow: var(--shadow); overflow: hidden;
+  }
+
+  .a4-layout {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    min-height: 500px;
+  }
+
+  /* 左エリア: 地図 */
+  .map-area {
+    border-right: 2px solid var(--border);
+    display: flex; flex-direction: column;
+  }
+  .map-cell {
+    flex: 1; padding: 8px;
+    border-bottom: 2px solid var(--border);
+    display: flex; flex-direction: column;
+  }
+  .map-cell:last-child { border-bottom: none; }
+  .map-cell-label {
+    font-size: 11px; font-weight: 700; color: var(--navy);
+    margin-bottom: 6px; letter-spacing: 0.3px;
+  }
+  .map-placeholder {
+    flex: 1; background: var(--cell-bg); border-radius: 4px;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    color: var(--text-sub); font-size: 11px; text-align: center;
+    min-height: 160px; border: 2px dashed var(--border);
+    gap: 4px;
+  }
+  .map-placeholder .icon { font-size: 24px; }
+
+  /* 右エリア: 写真グリッド */
+  .photo-area { padding: 8px; }
+  .photo-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .photo-cell {
+    border: 2px solid var(--border); border-radius: 6px; overflow: hidden;
+    background: white;
+  }
+  .photo-cell-header {
+    background: var(--navy); color: white;
+    padding: 4px 8px; font-size: 11px; font-weight: 700;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .photo-cell-header .cell-actions { display: flex; gap: 4px; }
+  .cell-action-btn {
+    background: rgba(255,255,255,0.2); border: none; color: white;
+    border-radius: 3px; padding: 2px 6px; font-size: 10px; cursor: pointer;
+  }
+  .cell-action-btn:active { background: rgba(255,255,255,0.4); }
+
+  .photo-slot {
+    aspect-ratio: 4/3; background: var(--cell-bg);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    cursor: pointer; transition: background 0.1s;
+    position: relative; overflow: hidden;
+  }
+  .photo-slot:active { background: #d0d8e8; }
+  .photo-slot img {
+    width: 100%; height: 100%; object-fit: cover;
+    position: absolute; inset: 0;
+  }
+  .photo-slot .slot-placeholder {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    color: var(--text-sub); font-size: 11px; text-align: center;
+  }
+  .photo-slot .slot-placeholder .icon { font-size: 28px; }
+  .photo-slot.has-photo .slot-placeholder { display: none; }
+
+  .photo-overlay {
+    position: absolute; inset: 0; background: rgba(0,0,0,0);
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    transition: background 0.15s; opacity: 0;
+  }
+  .photo-slot.has-photo:active .photo-overlay {
+    background: rgba(0,0,0,0.4); opacity: 1;
+  }
+
+  .comment-area { padding: 6px; border-top: 1px solid var(--border); }
+  .comment-area textarea {
+    width: 100%; border: none; resize: none; font-size: 12px;
+    color: var(--text); background: none; line-height: 1.5;
+    min-height: 48px;
+  }
+  .comment-area textarea:focus { outline: none; }
+  .comment-area textarea::placeholder { color: #aaa; }
+
+  /* フッターアクションバー */
+  .action-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: white; border-top: 2px solid var(--border);
+    padding: 10px 16px 30px;
+    display: flex; gap: 10px; z-index: 50;
+  }
+
+  /* 写真オプションシート */
+  .action-sheet { padding-bottom: 10px; }
+  .action-sheet-btn {
+    display: flex; align-items: center; gap: 12px;
+    width: 100%; padding: 16px; border: none; background: none;
+    font-size: 16px; color: var(--text); cursor: pointer;
+    border-bottom: 1px solid var(--border);
+  }
+  .action-sheet-btn:last-child { border-bottom: none; }
+  .action-sheet-btn:active { background: var(--bg); }
+  .action-sheet-btn .icon { font-size: 22px; width: 28px; }
+
+  /* トースト通知 */
+  .toast {
+    position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: var(--navy); color: white; padding: 10px 20px;
+    border-radius: 20px; font-size: 14px; font-weight: 600;
+    opacity: 0; transition: all 0.3s; z-index: 300; white-space: nowrap;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* 削除確認 */
+  .confirm-btns { display: flex; gap: 10px; margin-top: 20px; }
+  .confirm-btns .btn { flex: 1; }
+
+  /* スクロールバー非表示 */
+  .page-tabs::-webkit-scrollbar { display: none; }
+
+  /* 非表示input */
+  #cameraInput, #libraryInput { display: none; }
+</style>
+</head>
+<body>
+
+<!-- 隠しファイル入力 -->
+<input type="file" id="cameraInput" accept="image/*" capture="environment">
+<input type="file" id="libraryInput" accept="image/*" multiple>
+
+<!-- ===== 現場一覧画面 ===== -->
+<div class="screen active" id="screen-list">
+  <div class="app-header">
+    <h1>📋 現場台帳</h1>
+    <div class="header-right">
+      <button class="btn btn-primary btn-sm" onclick="openNewProjectModal()">＋ 新規現場</button>
+    </div>
+  </div>
+  <div class="list-screen">
+    <div class="list-header">
+      <div>
+        <h2>現場一覧</h2>
+        <div class="list-count" id="projectCount">0件</div>
+      </div>
+    </div>
+    <div id="projectList">
+      <div class="empty-state">
+        <div class="icon">🏗️</div>
+        <p>現場がまだ登録されていません。<br>「新規現場」から追加してください。</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 台帳編集画面 ===== -->
+<div class="screen" id="screen-ledger">
+  <div class="app-header">
+    <button class="back-btn" onclick="goBack()">← 一覧</button>
+    <h1 id="ledgerTitle">台帳</h1>
+    <div class="header-right">
+      <button class="btn-ghost" onclick="deleteCurrentProject()" style="color:#ff6b6b;">🗑</button>
+    </div>
+  </div>
+
+  <div class="ledger-screen">
+    <!-- ヘッダー情報 -->
+    <div class="ledger-header-section">
+      <div class="section-title">基本情報</div>
+      <div class="header-fields">
+        <div class="header-field header-field-full">
+          <label>現場名</label>
+          <input type="text" id="fieldSiteName" placeholder="例: ○○橋梁点検" oninput="saveHeader()">
+        </div>
+        <div class="header-field">
+          <label>調査日</label>
+          <input type="date" id="fieldDate" oninput="saveHeader()">
+        </div>
+        <div class="header-field">
+          <label>調査者名</label>
+          <input type="text" id="fieldInspector" placeholder="氏名" oninput="saveHeader()">
+        </div>
+        <div class="header-field">
+          <label>天気</label>
+          <select id="fieldWeather" onchange="saveHeader()">
+            <option value="">選択</option>
+            <option>☀️ 晴れ</option>
+            <option>⛅ 曇り</option>
+            <option>🌧️ 雨</option>
+            <option>❄️ 雪</option>
+            <option>🌫️ 霧</option>
+          </select>
+        </div>
+        <div class="header-field header-field-full">
+          <label>備考</label>
+          <input type="text" id="fieldNote" placeholder="その他特記事項" oninput="saveHeader()">
+        </div>
+      </div>
+    </div>
+
+    <!-- ページタブ -->
+    <div class="page-tabs" id="pageTabs">
+      <button class="add-page-btn" onclick="addPage()">＋ ページ追加</button>
+    </div>
+
+    <!-- A4横レイアウト -->
+    <div class="a4-container" id="a4Container">
+      <div class="a4-layout">
+        <!-- 左: 地図エリア -->
+        <div class="map-area">
+          <div class="map-cell">
+            <div class="map-cell-label">俯瞰図</div>
+            <div class="map-placeholder">
+              <span class="icon">🗺️</span>
+              <span>地理院地図<br>（第2段階で追加）</span>
+            </div>
+          </div>
+          <div class="map-cell">
+            <div class="map-cell-label">写真視点場</div>
+            <div class="map-placeholder">
+              <span class="icon">📍</span>
+              <span>撮影位置図<br>（第2段階で追加）</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 右: 写真グリッド -->
+        <div class="photo-area">
+          <div class="photo-grid" id="photoGrid"></div>
+          <div style="padding: 8px 0;">
+            <button class="btn btn-secondary btn-sm" onclick="addPhotoCell()" style="width:100%;">
+              ＋ 視点場を追加
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- アクションバー -->
+  <div class="action-bar">
+    <button class="btn btn-secondary" style="flex:1" onclick="showToast('PDF書き出しは第4段階で追加予定')">
+      📄 PDF書き出し
+    </button>
+    <button class="btn btn-primary" style="flex:1" onclick="showToast('保存しました')">
+      💾 保存
+    </button>
+  </div>
+</div>
+
+<!-- ===== モーダル: 新規現場 ===== -->
+<div class="modal-overlay" id="newProjectModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <h3>新規現場を作成</h3>
+    <div class="form-group">
+      <label>現場名 <span class="required">*</span></label>
+      <input type="text" class="form-control" id="newSiteName" placeholder="例: ○○橋梁点検">
+    </div>
+    <div class="form-group">
+      <label>撮影日 <span class="required">*</span></label>
+      <input type="date" class="form-control" id="newDate">
+    </div>
+    <div class="form-group">
+      <label>調査者名</label>
+      <input type="text" class="form-control" id="newInspector" placeholder="氏名">
+    </div>
+    <button class="btn btn-primary btn-full" onclick="createProject()">作成する</button>
+    <button class="btn btn-ghost btn-full" style="margin-top:8px" onclick="closeModal('newProjectModal')">キャンセル</button>
+  </div>
+</div>
+
+<!-- ===== モーダル: 写真オプション ===== -->
+<div class="modal-overlay" id="photoModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <h3 id="photoModalTitle">写真を追加</h3>
+    <div class="action-sheet">
+      <button class="action-sheet-btn" onclick="triggerCamera()">
+        <span class="icon">📷</span> カメラで撮影
+      </button>
+      <button class="action-sheet-btn" onclick="triggerLibrary()">
+        <span class="icon">🖼️</span> ライブラリから選択
+      </button>
+      <button class="action-sheet-btn" id="retakeBtn" onclick="retakePhoto()" style="display:none">
+        <span class="icon">🔄</span> 撮り直す
+      </button>
+      <button class="action-sheet-btn" id="deletePhotoBtn" onclick="deletePhoto()" style="color:var(--danger);display:none">
+        <span class="icon">🗑️</span> 写真を削除
+      </button>
+    </div>
+    <button class="btn btn-ghost btn-full" onclick="closeModal('photoModal')">キャンセル</button>
+  </div>
+</div>
+
+<!-- ===== モーダル: 削除確認 ===== -->
+<div class="modal-overlay" id="deleteModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <h3>現場を削除</h3>
+    <p style="text-align:center;color:var(--text-sub);margin-bottom:8px">この操作は取り消せません。</p>
+    <p style="text-align:center;font-weight:700;font-size:16px" id="deleteTargetName"></p>
+    <div class="confirm-btns">
+      <button class="btn btn-secondary" onclick="closeModal('deleteModal')">キャンセル</button>
+      <button class="btn btn-danger" onclick="confirmDelete()">削除する</button>
+    </div>
+  </div>
+</div>
+
+<!-- トースト -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== データ管理 =====
+let db = null;
+let currentProjectId = null;
+let currentPageIndex = 0;
+let activeCellIndex = null;
+let projects = {};
+
+// IndexedDB初期化
+function initDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('GenbaLedger', 1);
+    req.onupgradeneeded = (e) => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains('projects')) {
+        d.createObjectStore('projects', { keyPath: 'id' });
+      }
+    };
+    req.onsuccess = (e) => { db = e.target.result; resolve(); };
+    req.onerror = reject;
+  });
+}
+
+function saveProject(project) {
+  return new Promise((resolve) => {
+    const tx = db.transaction('projects', 'readwrite');
+    tx.objectStore('projects').put(project);
+    tx.oncomplete = resolve;
+  });
+}
+
+function loadAllProjects() {
+  return new Promise((resolve) => {
+    const tx = db.transaction('projects', 'readonly');
+    const req = tx.objectStore('projects').getAll();
+    req.onsuccess = () => resolve(req.result);
+  });
+}
+
+function deleteProject(id) {
+  return new Promise((resolve) => {
+    const tx = db.transaction('projects', 'readwrite');
+    tx.objectStore('projects').delete(id);
+    tx.oncomplete = resolve;
+  });
+}
+
+// ===== 現場一覧 =====
+async function renderProjectList() {
+  const list = await loadAllProjects();
+  list.sort((a, b) => b.createdAt - a.createdAt);
+  const container = document.getElementById('projectList');
+  const count = document.getElementById('projectCount');
+  count.textContent = `${list.length}件`;
+
+  if (list.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="icon">🏗️</div>
+        <p>現場がまだ登録されていません。<br>「新規現場」から追加してください。</p>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = list.map(p => {
+    const photoCount = p.pages.reduce((sum, page) =>
+      sum + page.cells.filter(c => c.photo).length, 0);
+    return `
+      <div class="project-card" onclick="openProject('${p.id}')">
+        <h3>${escHtml(p.siteName || '（現場名未入力）')}</h3>
+        <div class="project-card-meta">
+          <span>📅 ${p.date || '日付未設定'}</span>
+          <span>👤 ${escHtml(p.inspector || '未入力')}</span>
+          <span class="badge">📷 ${photoCount}枚</span>
+          <span class="badge">📄 ${p.pages.length}ページ</span>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ===== 新規現場作成 =====
+function openNewProjectModal() {
+  document.getElementById('newDate').value = new Date().toISOString().split('T')[0];
+  document.getElementById('newSiteName').value = '';
+  document.getElementById('newInspector').value = '';
+  openModal('newProjectModal');
+  setTimeout(() => document.getElementById('newSiteName').focus(), 300);
+}
+
+async function createProject() {
+  const siteName = document.getElementById('newSiteName').value.trim();
+  const date = document.getElementById('newDate').value;
+  if (!siteName) { showToast('現場名を入力してください'); return; }
+  if (!date) { showToast('撮影日を入力してください'); return; }
+
+  const project = {
+    id: 'proj_' + Date.now(),
+    siteName,
+    date,
+    inspector: document.getElementById('newInspector').value.trim(),
+    weather: '',
+    note: '',
+    createdAt: Date.now(),
+    pages: [createNewPage()]
+  };
+
+  await saveProject(project);
+  closeModal('newProjectModal');
+  openProject(project.id);
+}
+
+function createNewPage() {
+  return {
+    cells: [
+      { index: 0, photo: null, comment: '' },
+      { index: 1, photo: null, comment: '' },
+      { index: 2, photo: null, comment: '' },
+      { index: 3, photo: null, comment: '' },
+    ]
+  };
+}
+
+// ===== 台帳編集 =====
+async function openProject(id) {
+  const all = await loadAllProjects();
+  const project = all.find(p => p.id === id);
+  if (!project) return;
+
+  currentProjectId = id;
+  currentPageIndex = 0;
+  projects[id] = project;
+
+  // ヘッダー
+  document.getElementById('ledgerTitle').textContent = project.siteName || '台帳';
+  document.getElementById('fieldSiteName').value = project.siteName || '';
+  document.getElementById('fieldDate').value = project.date || '';
+  document.getElementById('fieldInspector').value = project.inspector || '';
+  document.getElementById('fieldWeather').value = project.weather || '';
+  document.getElementById('fieldNote').value = project.note || '';
+
+  showScreen('screen-ledger');
+  renderPages();
+  renderPhotoGrid();
+}
+
+function renderPages() {
+  const project = projects[currentProjectId];
+  const tabsEl = document.getElementById('pageTabs');
+  const tabs = project.pages.map((_, i) => `
+    <button class="page-tab ${i === currentPageIndex ? 'active' : ''}"
+      onclick="switchPage(${i})">ページ ${i + 1}</button>
+  `).join('');
+  tabsEl.innerHTML = tabs + `<button class="add-page-btn" onclick="addPage()">＋ ページ追加</button>`;
+}
+
+function switchPage(index) {
+  currentPageIndex = index;
+  renderPages();
+  renderPhotoGrid();
+}
+
+function addPage() {
+  const project = projects[currentProjectId];
+  project.pages.push(createNewPage());
+  currentPageIndex = project.pages.length - 1;
+  saveCurrentProject();
+  renderPages();
+  renderPhotoGrid();
+  showToast(`ページ ${project.pages.length} を追加しました`);
+}
+
+let globalCellCount = 0;
+
+function renderPhotoGrid() {
+  const project = projects[currentProjectId];
+  const page = project.pages[currentPageIndex];
+  const grid = document.getElementById('photoGrid');
+
+  // 通し番号を計算（前のページの枚数を合計）
+  let startNum = 0;
+  for (let i = 0; i < currentPageIndex; i++) {
+    startNum += project.pages[i].cells.length;
+  }
+
+  grid.innerHTML = page.cells.map((cell, i) => {
+    const num = startNum + i + 1;
+    const hasPhoto = !!cell.photo;
+    const kanjiNum = toKanji(num);
+    return `
+      <div class="photo-cell">
+        <div class="photo-cell-header">
+          <span>視点場${kanjiNum}</span>
+          <div class="cell-actions">
+            <button class="cell-action-btn" onclick="openPhotoOptions(${i})">
+              ${hasPhoto ? '変更' : '追加'}
+            </button>
+            ${page.cells.length > 1 ? `<button class="cell-action-btn" onclick="removeCell(${i})" style="background:rgba(255,100,100,0.4)">×</button>` : ''}
+          </div>
+        </div>
+        <div class="photo-slot ${hasPhoto ? 'has-photo' : ''}" onclick="openPhotoOptions(${i})">
+          ${hasPhoto ? `<img src="${cell.photo}" alt="視点場${kanjiNum}">` : ''}
+          <div class="slot-placeholder">
+            <span class="icon">📷</span>
+            <span>タップして写真追加</span>
+          </div>
+        </div>
+        <div class="comment-area">
+          <textarea placeholder="コメントを入力（音声入力は第3段階で追加）"
+            oninput="updateComment(${i}, this.value)"
+            rows="3">${escHtml(cell.comment)}</textarea>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function toKanji(n) {
+  const kanjiNums = ['①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩',
+    '⑪','⑫','⑬','⑭','⑮','⑯','⑰','⑱','⑲','⑳'];
+  return kanjiNums[n - 1] || `(${n})`;
+}
+
+function addPhotoCell() {
+  const project = projects[currentProjectId];
+  const page = project.pages[currentPageIndex];
+  page.cells.push({ index: page.cells.length, photo: null, comment: '' });
+  saveCurrentProject();
+  renderPhotoGrid();
+  showToast('視点場を追加しました');
+}
+
+function removeCell(cellIndex) {
+  const project = projects[currentProjectId];
+  const page = project.pages[currentPageIndex];
+  if (page.cells.length <= 1) { showToast('最低1枚は必要です'); return; }
+  page.cells.splice(cellIndex, 1);
+  saveCurrentProject();
+  renderPhotoGrid();
+}
+
+function updateComment(cellIndex, value) {
+  const project = projects[currentProjectId];
+  project.pages[currentPageIndex].cells[cellIndex].comment = value;
+  saveCurrentProject();
+}
+
+function saveHeader() {
+  if (!currentProjectId) return;
+  const project = projects[currentProjectId];
+  project.siteName = document.getElementById('fieldSiteName').value;
+  project.date = document.getElementById('fieldDate').value;
+  project.inspector = document.getElementById('fieldInspector').value;
+  project.weather = document.getElementById('fieldWeather').value;
+  project.note = document.getElementById('fieldNote').value;
+  document.getElementById('ledgerTitle').textContent = project.siteName || '台帳';
+  saveCurrentProject();
+}
+
+async function saveCurrentProject() {
+  if (!currentProjectId || !projects[currentProjectId]) return;
+  await saveProject(projects[currentProjectId]);
+}
+
+// ===== 写真操作 =====
+function openPhotoOptions(cellIndex) {
+  activeCellIndex = cellIndex;
+  const project = projects[currentProjectId];
+  const page = project.pages[currentPageIndex];
+  const cell = page.cells[cellIndex];
+  const hasPhoto = !!cell.photo;
+
+  const startNum = project.pages.slice(0, currentPageIndex)
+    .reduce((sum, p) => sum + p.cells.length, 0);
+  const num = startNum + cellIndex + 1;
+  document.getElementById('photoModalTitle').textContent = `視点場${toKanji(num)}`;
+  document.getElementById('retakeBtn').style.display = hasPhoto ? 'flex' : 'none';
+  document.getElementById('deletePhotoBtn').style.display = hasPhoto ? 'flex' : 'none';
+  openModal('photoModal');
+}
+
+function triggerCamera() {
+  closeModal('photoModal');
+  document.getElementById('cameraInput').click();
+}
+
+function triggerLibrary() {
+  closeModal('photoModal');
+  document.getElementById('libraryInput').click();
+}
+
+function retakePhoto() {
+  closeModal('photoModal');
+  document.getElementById('cameraInput').click();
+}
+
+function deletePhoto() {
+  const project = projects[currentProjectId];
+  project.pages[currentPageIndex].cells[activeCellIndex].photo = null;
+  saveCurrentProject();
+  renderPhotoGrid();
+  closeModal('photoModal');
+  showToast('写真を削除しました');
+}
+
+// ファイル読み込み
+document.getElementById('cameraInput').addEventListener('change', handleFileInput);
+document.getElementById('libraryInput').addEventListener('change', handleFileInput);
+
+function handleFileInput(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const project = projects[currentProjectId];
+    project.pages[currentPageIndex].cells[activeCellIndex].photo = ev.target.result;
+    saveCurrentProject();
+    renderPhotoGrid();
+    showToast('写真を追加しました');
+  };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+}
+
+// ===== 削除 =====
+function deleteCurrentProject() {
+  const project = projects[currentProjectId];
+  document.getElementById('deleteTargetName').textContent = project.siteName || '（現場名未入力）';
+  openModal('deleteModal');
+}
+
+async function confirmDelete() {
+  await deleteProject(currentProjectId);
+  delete projects[currentProjectId];
+  closeModal('deleteModal');
+  goBack();
+  showToast('現場を削除しました');
+}
+
+// ===== 画面遷移 =====
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+function goBack() {
+  showScreen('screen-list');
+  currentProjectId = null;
+  renderProjectList();
+}
+
+// ===== モーダル =====
+function openModal(id) {
+  document.getElementById(id).classList.add('open');
+}
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.classList.remove('open');
+  });
+});
+
+// ===== トースト =====
+let toastTimer = null;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+// ===== ユーティリティ =====
+function escHtml(str) {
+  return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ===== 起動 =====
+(async () => {
+  await initDB();
+  renderProjectList();
+})();
+</script>
+</body>
+</html>
