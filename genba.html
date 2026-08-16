@@ -1300,8 +1300,17 @@ function goBack(){
 }
 
 // ===== モーダル =====
-function openModal(id){document.getElementById(id).classList.add('open')}
-function closeModal(id){document.getElementById(id).classList.remove('open')}
+function openModal(id){
+  document.getElementById(id).classList.add('open');
+  // Leafletの地図がモーダルより前面に出るため一時的に非表示
+  document.querySelectorAll('.map-canvas-wrap').forEach(el=>el.style.visibility='hidden');
+}
+function closeModal(id){
+  document.getElementById(id).classList.remove('open');
+  // 全モーダルが閉じていたら地図を再表示
+  const anyOpen=document.querySelectorAll('.modal-overlay.open').length>0;
+  if(!anyOpen)document.querySelectorAll('.map-canvas-wrap').forEach(el=>el.style.visibility='visible');
+}
 document.querySelectorAll('.modal-overlay').forEach(o=>{o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open')})});
 
 // ===== トースト =====
