@@ -293,7 +293,7 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
     <span style="color:var(--orange-light);font-size:12px;font-weight:700;min-width:55px;text-align:center" id="detailEditDirLabel">N 0°</span>
   </div>
   <div class="map-modal-body">
-    <div id="detailEditMap"></div>
+    <div id="detailEditMap" style="width:100%;height:100%;min-height:300px"></div>
   </div>
   <div class="map-modal-footer">
     <button class="btn btn-secondary" onclick="closeDetailEditModal()">キャンセル</button>
@@ -1421,9 +1421,8 @@ function openDetailEditModal(){
   const sn=currentPageIndex*6;
   const tabs=page.cells.map((cell,i)=>{
     const num=sn+i+1;
-    const hasPhoto=!!cell.photo;
     const hasPos=!!cell.lat;
-    const color=hasPos?'#2E7D32':hasPhoto?'#E8671B':'#666';
+    const color=hasPos?'#2E7D32':'#E8671B';
     return `<button onclick="selectDetailEditCell(${i})"
       id="detailEditTab_${i}"
       style="flex-shrink:0;padding:6px 10px;border-radius:6px;border:2px solid ${activeEditCellIndex===i?'white':'transparent'};background:${color};color:white;font-size:11px;font-weight:700;cursor:pointer">
@@ -1432,15 +1431,25 @@ function openDetailEditModal(){
   }).join('');
   document.getElementById('detailEditTabs').innerHTML=tabs;
 
+  // 地図初期化（時間を長めに取る）
+  if(detailEditMap){detailEditMap.remove();detailEditMap=null;}
+  detailEditMarkers=[];detailEditArrows=[];
+
   setTimeout(()=>{
-    if(detailEditMap){detailEditMap.remove();detailEditMap=null;}
+    const mapEl=document.getElementById('detailEditMap');
+    if(!mapEl)return;
     const center=data?[data.centerLat,data.centerLng]:(currentLat?[currentLat,currentLng]:[35.6762,139.6503]);
     const zoom=data?data.zoom:17;
-    detailEditMap=L.map('detailEditMap').setView(center,zoom);
+    detailEditMap=L.map('detailEditMap',{zoomControl:true}).setView(center,zoom);
     L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',{attribution:'©国土地理院',maxZoom:18}).addTo(detailEditMap);
-    renderDetailEditMarkers();
-    selectDetailEditCell(activeEditCellIndex);
-  },100);
+    setTimeout(()=>{
+      detailEditMap.invalidateSize();
+      renderDetailEditMarkers();
+      // 最初の視点場を選択
+      const firstWithPhoto=page.cells.findIndex(c=>c.photo);
+      selectDetailEditCell(firstWithPhoto>=0?firstWithPhoto:0);
+    },200);
+  },300);
 }
 
 function renderDetailEditMarkers(){
