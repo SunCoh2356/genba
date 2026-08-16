@@ -232,6 +232,7 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
     <div class="sensor-bar">
       <div class="sensor-item"><span class="s-dot" id="gpsDot"></span><span id="gpsLabel">GPS待機中</span></div>
       <div class="sensor-item"><span class="s-dot" id="compassDot"></span><span id="compassLabel">コンパス待機中</span><span id="compassArrow" style="font-size:14px;margin-left:2px">↑</span></div>
+      <button id="compassPermBtn" onclick="requestCompassPermission()" style="background:var(--orange);color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;display:none">🧭 方位許可</button>
     </div>
     <div class="page-tabs" id="pageTabs"></div>
     <div class="a4-container" id="a4Container">
@@ -450,18 +451,39 @@ function startGPS(){
 }
 
 // ===== コンパス =====
-function startCompass(){
-  const handler=e=>{
+function requestCompassPermission(){
+  if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){
+    DeviceOrientationEvent.requestPermission().then(state=>{
+      if(state==='granted'){
+        document.getElementById('compassPermBtn').style.display='none';
+        startCompassListener();
+        showToast('方位センサーが有効になりました');
+      }else{
+        showToast('方位の許可が得られませんでした');
+      }
+    }).catch(e=>showToast('方位許可エラー: '+e.message));
+  }
+}
+
+function startCompassListener(){
+  window.addEventListener('deviceorientation',function handler(e){
     const h=e.webkitCompassHeading!==undefined?e.webkitCompassHeading:e.alpha;
     if(h===null||h===undefined)return;
     currentHeading=Math.round(h);
     document.getElementById('compassDot').className='s-dot active';
     document.getElementById('compassLabel').textContent=headingToLabel(currentHeading);
     document.getElementById('compassArrow').style.transform=`rotate(${currentHeading}deg)`;
-  };
+  },true);
+}
+
+function startCompass(){
   if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){
-    DeviceOrientationEvent.requestPermission().then(s=>{if(s==='granted')window.addEventListener('deviceorientation',handler,true)}).catch(()=>{});
-  }else{window.addEventListener('deviceorientation',handler,true)}
+    // iOS13以降は許可が必要→ボタンを表示
+    document.getElementById('compassPermBtn').style.display='block';
+  }else{
+    // Android・PCは直接開始
+    startCompassListener();
+  }
 }
 function headingToLabel(d){const dirs=['N','NE','E','SE','S','SW','W','NW'];return dirs[Math.round(d/45)%8]+' '+d+'°'}
 
@@ -1218,8 +1240,10 @@ function updateDetailMiniMap(){
     });
 
     // ▲矢印（撮影方向）SVGで描画
-    if(cell.heading!==null){
-      const rad=cell.heading*Math.PI/180;
+    const h=cell.heading;
+    if(h!==null&&h!==undefined&&!isNaN(Number(h))){
+      const heading=Number(h);
+      const rad=heading*Math.PI/180;
       const len=0.0004;
       const endLat=cell.lat+len*Math.cos(rad);
       const endLng=cell.lng+len*Math.sin(rad)/Math.cos(cell.lat*Math.PI/180);
@@ -1228,7 +1252,7 @@ function updateDetailMiniMap(){
       // ▲先端マーカー（SVG）
       const arrowIcon=L.divIcon({
         className:'',
-        html:`<svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg" style="transform:rotate(${cell.heading}deg);transform-origin:center;overflow:visible"><polygon points="10,2 16,18 10,14 4,18" fill="#E8671B" stroke="white" stroke-width="1.5"/></svg>`,
+        html:`<svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg" style="transform:rotate(${heading}deg);transform-origin:center;overflow:visible"><polygon points="10,2 16,18 10,14 4,18" fill="#E8671B" stroke="white" stroke-width="1.5"/></svg>`,
         iconSize:[20,20],
         iconAnchor:[10,10]
       });
