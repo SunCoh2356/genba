@@ -278,27 +278,25 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
   </div>
 </div>
 
-<!-- 視点場位置・方向編集モーダル -->
-<div class="map-modal-overlay" id="detailEditModal">
-  <div class="map-modal-header">
-    <h3 id="detailEditTitle">視点場 位置・方向編集</h3>
-    <button class="back-btn" onclick="closeDetailEditModal()">✕ 閉じる</button>
+<!-- 視点場位置・方向編集（独立画面） -->
+<div class="screen" id="screen-detail-edit">
+  <div class="app-header">
+    <button class="back-btn" onclick="closeDetailEditModal()">← 戻る</button>
+    <h1>視点場 位置・方向編集</h1>
+    <button class="btn btn-primary btn-sm" onclick="saveDetailEdit()">保存</button>
   </div>
   <!-- 視点場選択タブ -->
-  <div style="background:var(--navy);padding:6px 12px;display:flex;gap:6px;overflow-x:auto;flex-shrink:0" id="detailEditTabs"></div>
+  <div style="background:var(--navy);padding:6px 12px;display:flex;gap:6px;overflow-x:auto" id="detailEditTabs"></div>
   <!-- 方向スライダー -->
-  <div style="background:rgba(27,42,74,0.95);padding:8px 12px;display:flex;align-items:center;gap:8px;flex-shrink:0">
+  <div style="background:rgba(27,42,74,0.95);padding:8px 12px;display:flex;align-items:center;gap:8px">
     <span style="color:white;font-size:12px;white-space:nowrap">撮影方向</span>
     <input type="range" id="detailEditSlider" min="0" max="359" value="0" oninput="updateDetailEditDirection()"
       style="flex:1;-webkit-appearance:none;height:6px;border-radius:3px;background:rgba(255,255,255,0.3);outline:none">
     <span style="color:var(--orange-light);font-size:12px;font-weight:700;min-width:55px;text-align:center" id="detailEditDirLabel">N 0°</span>
   </div>
-  <div class="map-modal-body">
-    <div id="detailEditMap"></div>
-  </div>
-  <div class="map-modal-footer">
-    <button class="btn btn-secondary" onclick="closeDetailEditModal()">キャンセル</button>
-    <button class="btn btn-primary" onclick="saveDetailEdit()">保存</button>
+  <!-- 地図 -->
+  <div style="position:absolute;top:160px;left:0;right:0;bottom:0" id="detailEditMapWrap">
+    <div id="detailEditMap" style="width:100%;height:100%"></div>
   </div>
 </div>
 
@@ -1412,44 +1410,28 @@ function openDetailEditModal(){
   const project=projects[currentProjectId];
   const page=project.pages[currentPageIndex];
   const data=project.mapData.detail;
-
-  // 台帳画面を非表示
-  document.querySelector('.ledger-screen').style.display='none';
-  document.querySelector('.action-bar').style.display='none';
-  document.getElementById('detailEditModal').classList.add('open');
-
-  // タブを生成
+  activeEditCellIndex=0;
   const sn=currentPageIndex*6;
-  const tabs=page.cells.map((cell,i)=>{
+  document.getElementById('detailEditTabs').innerHTML=page.cells.map((cell,i)=>{
     const num=sn+i+1;
     const hasPos=!!cell.lat;
-    const color=hasPos?'#2E7D32':'#E8671B';
-    return `<button onclick="selectDetailEditCell(${i})"
-      id="detailEditTab_${i}"
-      style="flex-shrink:0;padding:6px 10px;border-radius:6px;border:2px solid ${activeEditCellIndex===i?'white':'transparent'};background:${color};color:white;font-size:11px;font-weight:700;cursor:pointer">
+    return `<button onclick="selectDetailEditCell(${i})" id="detailEditTab_${i}"
+      style="flex-shrink:0;padding:6px 10px;border-radius:6px;border:2px solid ${i===0?'white':'transparent'};background:${hasPos?'#2E7D32':'#E8671B'};color:white;font-size:11px;font-weight:700;cursor:pointer">
       視点場${toKanji(num)}${hasPos?'📍':''}
     </button>`;
   }).join('');
-  document.getElementById('detailEditTabs').innerHTML=tabs;
-
-  // 地図初期化（時間を長めに取る）
+  showScreen('screen-detail-edit');
   if(detailEditMap){detailEditMap.remove();detailEditMap=null;}
   detailEditMarkers=[];detailEditArrows=[];
-
   setTimeout(()=>{
-    const mapEl=document.getElementById('detailEditMap');
-    if(!mapEl)return;
     const center=data?[data.centerLat,data.centerLng]:(currentLat?[currentLat,currentLng]:[35.6762,139.6503]);
     const zoom=data?data.zoom:17;
-    detailEditMap=L.map('detailEditMap',{zoomControl:true}).setView(center,zoom);
+    detailEditMap=L.map('detailEditMap').setView(center,zoom);
     L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',{attribution:'©国土地理院',maxZoom:18}).addTo(detailEditMap);
-    setTimeout(()=>{
-      detailEditMap.invalidateSize();
-      renderDetailEditMarkers();
-      // 最初の視点場を選択
-      const firstWithPhoto=page.cells.findIndex(c=>c.photo);
-      selectDetailEditCell(firstWithPhoto>=0?firstWithPhoto:0);
-    },200);
+    detailEditMap.invalidateSize();
+    renderDetailEditMarkers();
+    const firstWithPhoto=page.cells.findIndex(c=>c.photo);
+    selectDetailEditCell(firstWithPhoto>=0?firstWithPhoto:0);
   },300);
 }
 
@@ -1551,11 +1533,10 @@ function saveDetailEdit(){
 }
 
 function closeDetailEditModal(){
-  document.getElementById('detailEditModal').classList.remove('open');
-  document.querySelector('.ledger-screen').style.display='block';
-  document.querySelector('.action-bar').style.display='grid';
   if(detailEditMap){detailEditMap.remove();detailEditMap=null;}
   detailEditMarkers=[];detailEditArrows=[];
+  showScreen('screen-ledger');
+  renderMiniMaps();
 }
 function openAdjustModal(){
   closeModal('photoModal');
