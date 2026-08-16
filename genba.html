@@ -9,6 +9,7 @@
 <title>現場台帳</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-image@0.4.0/leaflet-image.js"></script>
 
 <style>
 :root{--navy:#1B2A4A;--orange:#E8671B;--orange-light:#F5874A;--bg:#F2F4F7;--border:#D0D5DD;--text:#1A1A2E;--text-sub:#5A6478;--danger:#D93025;--cell-bg:#E8ECF2;--radius:8px;--shadow:0 2px 8px rgba(0,0,0,0.12)}
@@ -167,9 +168,11 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
   <div class="app-header">
     <h1>📋 現場台帳</h1>
     <div class="header-right">
+      <button class="btn btn-secondary btn-sm" onclick="document.getElementById('importInput').click()">📥 取込</button>
       <button class="btn btn-primary btn-sm" onclick="openNewProjectModal()">＋ 新規現場</button>
     </div>
   </div>
+  <input type="file" id="importInput" accept=".json" style="display:none">
   <div class="list-screen">
     <div class="list-header">
       <div><h2>現場一覧</h2><div class="list-count" id="projectCount">0件</div></div>
@@ -296,7 +299,7 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
     <h3>書き出し・納品</h3>
     <!-- 一括書き出し -->
     <button class="btn btn-primary btn-full" onclick="exportAll()" style="margin-bottom:16px;font-size:16px">
-      🚀 一括書き出し（Excel＋写真＋PDF）
+      🚀 一括書き出し（CSV＋写真＋地図画像）
     </button>
     <div id="exportProgress" style="display:none;margin-bottom:16px;padding:12px;background:var(--cell-bg);border-radius:var(--radius)">
       <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:6px" id="exportProgressLabel">書き出し中...</div>
@@ -307,6 +310,11 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
     <div style="border-top:1px solid var(--border);padding-top:12px;margin-bottom:12px">
       <div style="font-size:12px;color:var(--text-sub);margin-bottom:10px;text-align:center">個別に書き出す</div>
       <div class="export-options">
+        <div class="export-card" onclick="exportJson()">
+          <div class="export-icon">📦</div>
+          <h4>データをエクスポート（iPhone→PC転送用）</h4>
+          <p>現場データ（写真・コメント・位置情報）をJSONファイルで書き出します。PCのアプリで「取込」ボタンから読み込めます。</p>
+        </div>
         <div class="export-card" onclick="exportExcel()">
           <div class="export-icon">📊</div>
           <h4>Excelデータ書き出し</h4>
@@ -316,6 +324,11 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
           <div class="export-icon">🖼️</div>
           <h4>写真を一括保存</h4>
           <p>現場の全写真を連番ファイル名（視点場01.jpg など）でまとめてダウンロードします。</p>
+        </div>
+        <div class="export-card" onclick="exportMapImages()">
+          <div class="export-icon">🗺️</div>
+          <h4>地図画像を保存</h4>
+          <p>俯瞰図・視点場図を画像ファイル（PNG）として保存します。撮影位置マーカーと方向矢印も含まれます。</p>
         </div>
         <div class="export-card" onclick="printPDF()">
           <div class="export-icon">📄</div>
@@ -639,6 +652,81 @@ function handleFileInput(e){
 // ===== 書き出し =====
 function openExportModal(){openModal('exportModal')}
 
+// 写真1枚ダウンロード
+async function downloadPhoto(photoData,filename){
+  try{
+    const base64=photoData.split(',')[1];
+    const byteStr=atob(base64);
+    const arr=new Uint8Array(byteStr.length);
+    for(let i=0;i<byteStr.length;i++)arr[i]=byteStr.charCodeAt(i);
+    const blob=new Blob([arr],{type:'image/jpeg'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;a.download=filename;
+    document.body.appendChild(a);a.click();
+    document.body.removeChild(a);
+    await new Promise(r=>setTimeout(r,100));
+    URL.revokeObjectURL(url);
+  }catch(e){console.error('写真DLエラー:',e)}
+}
+
+// 地図画像書き出し
+async function exportMapImages(){
+  const project=projects[currentProjectId];
+  let count=0;
+  const siteName=(project.siteName||'現場台帳').replace(/[\/\\:*?"<>|]/g,'_');
+
+  // 俯瞰図
+  if(overviewMiniMap){
+    try{
+      await new Promise((resolve,reject)=>{
+        leafletImage(overviewMiniMap,(err,canvas)=>{
+          if(err){reject(err);return}
+          canvas.toBlob(blob=>{
+            const url=URL.createObjectURL(blob);
+            const a=document.createElement('a');
+            a.href=url;a.download=`${siteName}_俯瞰図.png`;
+            document.body.appendChild(a);a.click();
+            document.body.removeChild(a);
+            setTimeout(()=>URL.revokeObjectURL(url),1000);
+            count++;resolve();
+          },'image/png');
+        });
+      });
+      await new Promise(r=>setTimeout(r,800));
+    }catch(e){showToast('俯瞰図の書き出しに失敗しました');console.error(e)}
+  }else{
+    showToast('俯瞰図が設定されていません');
+  }
+
+  // 視点場図
+  if(detailMiniMap){
+    try{
+      await new Promise((resolve,reject)=>{
+        leafletImage(detailMiniMap,(err,canvas)=>{
+          if(err){reject(err);return}
+          canvas.toBlob(blob=>{
+            const url=URL.createObjectURL(blob);
+            const a=document.createElement('a');
+            a.href=url;a.download=`${siteName}_視点場図.png`;
+            document.body.appendChild(a);a.click();
+            document.body.removeChild(a);
+            setTimeout(()=>URL.revokeObjectURL(url),1000);
+            count++;resolve();
+          },'image/png');
+        });
+      });
+    }catch(e){showToast('視点場図の書き出しに失敗しました');console.error(e)}
+  }else{
+    showToast('視点場図が設定されていません');
+  }
+
+  if(count>0){
+    closeModal('exportModal');
+    showToast(`地図画像${count}枚を保存しました`);
+  }
+}
+
 // 一括書き出し
 async function exportAll(){
   const progress=document.getElementById('exportProgress');
@@ -646,65 +734,180 @@ async function exportAll(){
   const bar=document.getElementById('exportProgressBar');
   progress.style.display='block';
 
-  // Step1: Excel
-  label.textContent='📊 Excelを書き出し中...';bar.style.width='10%';
-  await new Promise(r=>setTimeout(r,300));
-  exportExcel();
-  bar.style.width='33%';
+  // Step1: CSV
+  label.textContent='📊 CSVを書き出し中...';bar.style.width='5%';
   await new Promise(r=>setTimeout(r,500));
+  exportCsvOnly();
+  bar.style.width='20%';
+  await new Promise(r=>setTimeout(r,1000));
 
-  // Step2: 写真
+  // Step2: 地図画像
+  label.textContent='🗺️ 地図画像を書き出し中...';
   const project=projects[currentProjectId];
-  const totalPhotos=project.pages.reduce((s,pg)=>s+pg.cells.filter(c=>c.photo).length,0);
-  if(totalPhotos>0){
-    label.textContent=`🖼️ 写真を保存中（${totalPhotos}枚）...`;
-    let sn=0,count=0;
-    for(let pageIdx=0;pageIdx<project.pages.length;pageIdx++){
-      const page=project.pages[pageIdx];
-      for(let ci=0;ci<page.cells.length;ci++){
-        const cell=page.cells[ci];
-        if(!cell.photo){sn++;continue}
-        const num=sn+ci+1;
-        const filename=`視点場${String(num).padStart(2,'0')}.jpg`;
-        const base64=cell.photo.split(',')[1];
-        const byteStr=atob(base64);
-        const arr=new Uint8Array(byteStr.length);
-        for(let i=0;i<byteStr.length;i++)arr[i]=byteStr.charCodeAt(i);
-        const blob=new Blob([arr],{type:'image/jpeg'});
-        const url=URL.createObjectURL(blob);
-        const a=document.createElement('a');
-        a.href=url;a.download=filename;
-        document.body.appendChild(a);a.click();
-        document.body.removeChild(a);URL.revokeObjectURL(url);
-        count++;
-        bar.style.width=`${33+Math.round(count/totalPhotos*33)}%`;
-        await new Promise(r=>setTimeout(r,400));
+  const siteName=(project.siteName||'現場台帳').replace(/[\/\\:*?"<>|]/g,'_');
+  if(overviewMiniMap){
+    try{
+      await new Promise((resolve,reject)=>{
+        leafletImage(overviewMiniMap,(err,canvas)=>{
+          if(err){resolve();return}
+          canvas.toBlob(blob=>{
+            const url=URL.createObjectURL(blob);
+            const a=document.createElement('a');
+            a.href=url;a.download=`${siteName}_俯瞰図.png`;
+            document.body.appendChild(a);a.click();
+            document.body.removeChild(a);
+            setTimeout(()=>URL.revokeObjectURL(url),1000);
+            resolve();
+          },'image/png');
+        });
+      });
+      await new Promise(r=>setTimeout(r,800));
+    }catch(e){console.error(e)}
+  }
+  bar.style.width='35%';
+  if(detailMiniMap){
+    try{
+      await new Promise((resolve,reject)=>{
+        leafletImage(detailMiniMap,(err,canvas)=>{
+          if(err){resolve();return}
+          canvas.toBlob(blob=>{
+            const url=URL.createObjectURL(blob);
+            const a=document.createElement('a');
+            a.href=url;a.download=`${siteName}_視点場図.png`;
+            document.body.appendChild(a);a.click();
+            document.body.removeChild(a);
+            setTimeout(()=>URL.revokeObjectURL(url),1000);
+            resolve();
+          },'image/png');
+        });
+      });
+      await new Promise(r=>setTimeout(r,800));
+    }catch(e){console.error(e)}
+  }
+  bar.style.width='50%';
+
+  // Step3: 写真
+  let totalPhotos=0;
+  let sn=0;
+  const photoList=[];
+  for(let pageIdx=0;pageIdx<project.pages.length;pageIdx++){
+    const page=project.pages[pageIdx];
+    for(let ci=0;ci<page.cells.length;ci++){
+      const cell=page.cells[ci];
+      const num=sn+ci+1;
+      if(cell.photo){
+        photoList.push({photo:cell.photo,filename:`視点場${String(num).padStart(2,'0')}.jpg`});
+        totalPhotos++;
       }
-      sn+=page.cells.length;
+    }
+    sn+=page.cells.length;
+  }
+  if(totalPhotos>0){
+    label.textContent=`🖼️ 写真を保存中（0/${totalPhotos}枚）...`;
+    for(let i=0;i<photoList.length;i++){
+      const {photo,filename}=photoList[i];
+      await downloadPhoto(photo,filename);
+      bar.style.width=`${50+Math.round((i+1)/totalPhotos*45)}%`;
+      label.textContent=`🖼️ 写真を保存中（${i+1}/${totalPhotos}枚）...`;
+      await new Promise(r=>setTimeout(r,800));
     }
   }
-  bar.style.width='80%';
 
-  // Step3: PDF
-  label.textContent='📄 PDF印刷を準備中...';
-  await new Promise(r=>setTimeout(r,500));
   bar.style.width='100%';
-  label.textContent='✅ 書き出し完了！印刷ダイアログが開きます';
-  await new Promise(r=>setTimeout(r,800));
+  label.textContent='✅ 書き出し完了！';
+  await new Promise(r=>setTimeout(r,1000));
   progress.style.display='none';
   closeModal('exportModal');
-  setTimeout(()=>{
-    showToast('印刷ダイアログから「PDFに保存」を選択してください');
-    setTimeout(()=>window.print(),500);
-  },300);
+  showToast(`CSV＋地図画像＋写真${totalPhotos}枚を書き出しました`);
 }
 
-// Excel書き出し（CSV形式、Excelで開ける）
+// JSONエクスポート（iPhone→PC転送用）
+function exportJson(){
+  try{
+    const project=projects[currentProjectId];
+    const json=JSON.stringify(project,null,2);
+    const blob=new Blob([json],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    const filename=`${(project.siteName||'現場台帳').replace(/[\/\\:*?"<>|]/g,'_')}_${project.date||'日付未設定'}.json`;
+    a.href=url;a.download=filename;
+    document.body.appendChild(a);a.click();
+    document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+    closeModal('exportModal');
+    showToast('データをエクスポートしました');
+  }catch(e){showToast('エクスポートエラー: '+e.message)}
+}
+
+// JSONインポート（PC側で読み込み）
+function initImport(){
+  const input=document.getElementById('importInput');
+  if(!input)return;
+  input.addEventListener('change',async e=>{
+    const file=e.target.files[0];
+    if(!file)return;
+    try{
+      const text=await file.text();
+      const project=JSON.parse(text);
+      if(!project.id||!project.pages){showToast('このファイルは現場台帳データではありません');return}
+      // 既存データと重複する場合は新しいIDを付与
+      const all=await loadAllProjects();
+      const exists=all.find(p=>p.id===project.id);
+      if(exists){
+        project.id='proj_'+Date.now();
+        project.siteName=(project.siteName||'')+'（取込）';
+      }
+      await saveProject(project);
+      await renderProjectList();
+      showToast(`「${project.siteName}」を取り込みました`);
+    }catch(e){showToast('取込エラー: ファイルが正しくありません')}
+    e.target.value='';
+  });
+}
+
+// CSV生成コア
+function buildCsvBlob(){
+  const project=projects[currentProjectId];
+  const rows=[];
+  rows.push(['現場台帳']);rows.push([]);
+  rows.push(['現場名',project.siteName||'']);
+  rows.push(['調査日',project.date||'']);
+  rows.push(['調査者名',project.inspector||'']);
+  rows.push(['天気',project.weather||'']);
+  rows.push(['備考',project.note||'']);
+  rows.push([]);
+  rows.push(['視点場番号','ページ','コメント','緯度','経度','撮影方向','写真ファイル名']);
+  project.pages.forEach((page,pageIdx)=>{
+    let sn=0;for(let i=0;i<pageIdx;i++)sn+=project.pages[i].cells.length;
+    page.cells.forEach((cell,cellIdx)=>{
+      const num=sn+cellIdx+1;
+      rows.push([`視点場${num}`,`ページ${pageIdx+1}`,cell.comment||'',cell.lat!=null?cell.lat:'',cell.lng!=null?cell.lng:'',cell.heading!=null?headingToLabel(cell.heading):'',cell.photo?`視点場${String(num).padStart(2,'0')}.jpg`:'']);
+    });
+  });
+  const csv=rows.map(row=>row.map(cell=>{const s=String(cell);return s.includes(',')||s.includes('"')||s.includes('\n')?`"${s.replace(/"/g,'""')}"`:s}).join(',')).join('\n');
+  return new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
+}
+
+// CSV書き出し（モーダルを閉じないバージョン・一括用）
+function exportCsvOnly(){
+  try{
+    const project=projects[currentProjectId];
+    const blob=buildCsvBlob();
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    const filename=`${(project.siteName||'現場台帳').replace(/[\/\\:*?"<>|]/g,'_')}_${project.date||'日付未設定'}.csv`;
+    a.href=url;a.download=filename;
+    document.body.appendChild(a);a.click();
+    document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }catch(e){showToast('CSVエラー: '+e.message)}
+}
+
+// Excel書き出し（個別ボタン用）
 function exportExcel(){
   try{
     const project=projects[currentProjectId];
     const rows=[];
-    // BOM付きUTF-8でExcelが文字化けしないようにする
     rows.push(['現場台帳']);
     rows.push([]);
     rows.push(['現場名',project.siteName||'']);
@@ -943,7 +1146,7 @@ function showToast(msg){const el=document.getElementById('toast');el.textContent
 function escHtml(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 
 // ===== 起動 =====
-(async()=>{await initDB();renderProjectList()})();
+(async()=>{await initDB();renderProjectList();initImport()})();
 </script>
 </body>
 </html>
