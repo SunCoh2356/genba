@@ -1101,4 +1101,236 @@ async function exportOriginalPhotos(){
     for(let ci=0;ci<project.pages[pi].cells.length;ci++){
       const cell=project.pages[pi].cells[ci];
       if(!cell.photo)continue;
- 
+      const num=pi*6+ci+1;
+      await downloadPhoto(cell.photo,`${sn}_視点場${String(num).padStart(2,'0')}.jpg`);
+      count++;await new Promise(r=>setTimeout(r,600));
+    }
+  }
+  closeModal('exportModal');showToast(`オリジナル写真${count}枚を保存しました`);
+  if(count>0){
+    setTimeout(()=>{
+      if(confirm(`${count}枚の写真をPCに保存しました。\nアプリ内のこの現場データを全て削除しますか？\n\n※JSONエクスポートも済んでいる場合のみ削除してください`)){
+        const id=currentProjectId;
+        deleteProjectDB(id).then(()=>{delete projects[id];goBack();showToast('現場データをアプリから削除しました');});
+      }
+    },500);
+  }
+}
+
+async function exportMapImages(){
+  const project=projects[currentProjectId];
+  const sn=(project.siteName||'現場台帳').replace(/[/\\:*?"<>|]/g,'_');
+  let count=0;
+  if(overviewMiniMap){
+    try{
+      await new Promise(resolve=>{
+        leafletImage(overviewMiniMap,(err,canvas)=>{
+          if(err){resolve();return}
+          canvas.toBlob(blob=>{
+            const url=URL.createObjectURL(blob);const a=document.createElement('a');
+            a.href=url;a.download=`${sn}_俯瞰図.png`;document.body.appendChild(a);a.click();document.body.removeChild(a);
+            setTimeout(()=>URL.revokeObjectURL(url),1000);count++;resolve();
+          },'image/png');
+        });
+      });
+      await new Promise(r=>setTimeout(r,800));
+    }catch(e){}
+  }
+  if(detailMiniMap){
+    try{
+      await new Promise(resolve=>{
+        leafletImage(detailMiniMap,(err,canvas)=>{
+          if(err){resolve();return}
+          canvas.toBlob(blob=>{
+            const url=URL.createObjectURL(blob);const a=document.createElement('a');
+            a.href=url;a.download=`${sn}_視点場図_P${currentPageIndex+1}.png`;document.body.appendChild(a);a.click();document.body.removeChild(a);
+            setTimeout(()=>URL.revokeObjectURL(url),1000);count++;resolve();
+          },'image/png');
+        });
+      });
+    }catch(e){}
+  }
+  closeModal('exportModal');showToast(count>0?`地図画像${count}枚を保存しました`:'地図が設定されていません');
+}
+
+async function exportAll(){
+  const progress=document.getElementById('exportProgress');
+  const label=document.getElementById('exportProgressLabel');
+  const bar=document.getElementById('exportProgressBar');
+  progress.style.display='block';
+  label.textContent='📊 CSVを書き出し中...';bar.style.width='5%';
+  await new Promise(r=>setTimeout(r,500));
+  exportCsvOnly();bar.style.width='15%';await new Promise(r=>setTimeout(r,800));
+  label.textContent='🗺️ 地図画像を書き出し中...';
+  const project=projects[currentProjectId];
+  const sn=(project.siteName||'現場台帳').replace(/[/\\:*?"<>|]/g,'_');
+  if(overviewMiniMap){try{await new Promise(resolve=>{leafletImage(overviewMiniMap,(err,canvas)=>{if(err){resolve();return}canvas.toBlob(blob=>{const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`${sn}_俯瞰図.png`;document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(()=>URL.revokeObjectURL(url),1000);resolve();},'image/png');})});await new Promise(r=>setTimeout(r,800));}catch(e){}}
+  bar.style.width='30%';
+  if(detailMiniMap){try{await new Promise(resolve=>{leafletImage(detailMiniMap,(err,canvas)=>{if(err){resolve();return}canvas.toBlob(blob=>{const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`${sn}_視点場図_P${currentPageIndex+1}.png`;document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(()=>URL.revokeObjectURL(url),1000);resolve();},'image/png');})});await new Promise(r=>setTimeout(r,800));}catch(e){}}
+  bar.style.width='45%';
+  let totalPhotos=0;const photoList=[];
+  for(let pi=0;pi<project.pages.length;pi++){
+    for(let ci=0;ci<project.pages[pi].cells.length;ci++){
+      const cell=project.pages[pi].cells[ci];const num=pi*6+ci+1;
+      if(cell.photo){photoList.push({photo:cell.photo,filename:`${sn}_視点場${String(num).padStart(2,'0')}.jpg`});totalPhotos++;}
+    }
+  }
+  if(totalPhotos>0){
+    label.textContent=`🖼️ 写真を保存中（0/${totalPhotos}枚）...`;
+    for(let i=0;i<photoList.length;i++){
+      await downloadPhoto(photoList[i].photo,photoList[i].filename);
+      bar.style.width=`${45+Math.round((i+1)/totalPhotos*50)}%`;
+      label.textContent=`🖼️ 写真を保存中（${i+1}/${totalPhotos}枚）...`;
+      await new Promise(r=>setTimeout(r,800));
+    }
+  }
+  bar.style.width='100%';label.textContent='✅ 書き出し完了！';
+  await new Promise(r=>setTimeout(r,1000));
+  progress.style.display='none';closeModal('exportModal');
+  showToast(`CSV＋地図＋写真${totalPhotos}枚を書き出しました`);
+  setTimeout(()=>{
+    if(confirm('PCへの書き出しが完了しました。\nアプリ内のこの現場データを全て削除しますか？')){
+      const id=currentProjectId;deleteProjectDB(id).then(()=>{delete projects[id];goBack();showToast('現場データをアプリから削除しました');});
+    }
+  },500);
+}
+
+function exportCsvOnly(){
+  const project=projects[currentProjectId];
+  const rows=[['現場台帳'],[]];
+  rows.push(['現場名',project.siteName||''],['調査日',project.date||''],['調査者名',project.inspector||''],['天気',project.weather||''],['備考',project.note||''],[]);
+  rows.push(['視点場番号','ページ','コメント','緯度','経度','撮影方向','写真ファイル名']);
+  project.pages.forEach((page,pi)=>{
+    page.cells.forEach((cell,ci)=>{
+      const num=pi*6+ci+1;
+      rows.push([`視点場${num}`,`ページ${pi+1}`,cell.comment||'',cell.lat!=null?cell.lat:'',cell.lng!=null?cell.lng:'',cell.heading!=null?headingToLabel(cell.heading):'',cell.photo?`視点場${String(num).padStart(2,'0')}.jpg`:'']);
+    });
+  });
+  const csv=rows.map(r=>r.map(c=>{const s=String(c);return s.includes(',')||s.includes('"')?`"${s.replace(/"/g,'""')}"`:s}).join(',')).join('\n');
+  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  const sn=(project.siteName||'現場台帳').replace(/[/\\:*?"<>|]/g,'_');
+  a.href=url;a.download=`${sn}_${project.date||'日付未設定'}.csv`;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+function openPrintPreview(){
+  closeModal('exportModal');
+  const project=projects[currentProjectId];
+  const content=document.getElementById('previewContent');
+  content.innerHTML='';
+  project.pages.forEach((page,pi)=>{
+    const sn=pi*6;
+    let photoHtml='';
+    for(let row=0;row<3;row++){
+      for(let col=0;col<2;col++){
+        const i=row*2+col;
+        const cell=page.cells[i]||{photo:null,comment:''};
+        const num=sn+i+1;
+        const imgHtml=cell.photo?`<img src="${cell.photo}" style="width:100%;height:100%;object-fit:cover;display:block">`:`<div style="height:100%;background:#E8ECF2;display:flex;align-items:center;justify-content:center;color:#999;font-size:10px">写真なし</div>`;
+        photoHtml+=`<div class="preview-photo-cell">
+          <div class="preview-photo-header">視点場${toKanji(num)}</div>
+          <div class="preview-photo-img">${imgHtml}</div>
+          <div class="preview-photo-comment">${escHtml(cell.comment)}</div>
+        </div>`;
+      }
+    }
+    const pageDiv=document.createElement('div');
+    pageDiv.className='preview-page';
+    pageDiv.innerHTML=`
+      <div class="preview-header-bar">
+        <span><b>現場名:</b> ${escHtml(project.siteName||'')}</span>
+        <span><b>調査日:</b> ${project.date||''}</span>
+        <span><b>調査者:</b> ${escHtml(project.inspector||'')}</span>
+        <span><b>天気:</b> ${escHtml(project.weather||'')}</span>
+        <span><b>ページ:</b> ${pi+1}/${project.pages.length}</span>
+      </div>
+      <div class="preview-page-inner">
+        <div class="preview-map-area">
+          <div class="preview-map-cell">
+            <div class="preview-map-label">俯瞰図</div>
+            <div class="preview-map-img"><div style="font-size:9px;color:#666;text-align:center;padding:20px">地図は台帳画面で確認してください</div></div>
+            <div style="font-size:7px;color:#999;text-align:right">©国土地理院</div>
+          </div>
+          <div class="preview-map-cell">
+            <div class="preview-map-label">写真視点場（P${pi+1}）</div>
+            <div class="preview-map-img"><div style="font-size:9px;color:#666;text-align:center;padding:20px">地図は台帳画面で確認してください</div></div>
+            <div style="font-size:7px;color:#999;text-align:right">©国土地理院</div>
+          </div>
+        </div>
+        <div class="preview-photo-area">
+          <div class="preview-photo-grid">${photoHtml}</div>
+        </div>
+      </div>`;
+    content.appendChild(pageDiv);
+  });
+  showScreen('screen-preview');
+}
+
+function deleteCurrentProject(){document.getElementById('deleteTargetName').textContent=projects[currentProjectId].siteName||'（現場名未入力）';openModal('deleteModal')}
+async function confirmDelete(){await deleteProjectDB(currentProjectId);delete projects[currentProjectId];closeModal('deleteModal');goBack();showToast('現場を削除しました')}
+
+function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');window.scrollTo(0,0)}
+function goBack(){
+  if(gpsWatchId){navigator.geolocation.clearWatch(gpsWatchId);gpsWatchId=null}
+  if(isRecording)stopRecording();
+  if(fullMap){fullMap.remove();fullMap=null}
+  if(overviewMiniMap){overviewMiniMap.remove();overviewMiniMap=null}
+  if(detailMiniMap){detailMiniMap.remove();detailMiniMap=null}
+  showScreen('screen-list');currentProjectId=null;renderProjectList();
+}
+
+function openModal(id){
+  document.getElementById(id).classList.add('open');
+  document.querySelectorAll('.map-canvas-wrap').forEach(el=>el.style.visibility='hidden');
+}
+function closeModal(id){
+  document.getElementById(id).classList.remove('open');
+  const anyOpen=document.querySelectorAll('.modal-overlay.open').length>0;
+  if(!anyOpen)document.querySelectorAll('.map-canvas-wrap').forEach(el=>el.style.visibility='visible');
+}
+document.querySelectorAll('.modal-overlay').forEach(o=>{o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open')})});
+
+let toastTimer=null;
+function showToast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');if(toastTimer)clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),2500)}
+
+function initImport(){
+  const input=document.getElementById('importInput');
+  if(!input)return;
+  input.onchange=function(){
+    const file=this.files[0];const inputEl=this;
+    if(!file)return;
+    showToast('取込中...');
+    const reader=new FileReader();
+    reader.onload=function(e){
+      try{
+        const project=JSON.parse(e.target.result);
+        if(!project.id||!project.pages){showToast('このファイルは現場台帳データではありません');inputEl.value='';return}
+        if(!project.mapData)project.mapData={overview:null,overviewScale:4};
+        // 互換性対応：古いmapData.detailをページごとのmapDetailに変換
+        const sharedDetail=project.mapData.detail||null;
+        delete project.mapData.detail;
+        if(!project.mapData.overview&&sharedDetail)project.mapData.overview=sharedDetail;
+        project.pages.forEach(page=>{
+          if(!page.mapDetail)page.mapDetail=sharedDetail;
+          if(!page.cells||!Array.isArray(page.cells))page.cells=[];
+          while(page.cells.length<6)page.cells.push({index:page.cells.length,photo:null,comment:'',lat:null,lng:null,heading:null});
+        });
+        loadAllProjects().then(all=>{
+          const exists=all.find(p=>p.id===project.id);
+          if(exists){project.id='proj_'+Date.now();project.siteName=(project.siteName||'')+'（取込）';}
+          saveProject(project).then(()=>{renderProjectList();showToast(`「${project.siteName}」を取り込みました`);});
+        });
+      }catch(err){showToast('取込エラー: '+err.message);console.error(err)}
+      inputEl.value='';
+    };
+    reader.readAsText(file,'UTF-8');
+  };
+}
+
+(async()=>{await initDB();renderProjectList();initImport()})();
+</script>
+</body>
+</html>
