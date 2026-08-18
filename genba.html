@@ -763,13 +763,13 @@ function handleFileInput(e){
   const img=new Image();
   const objectUrl=URL.createObjectURL(file);
   img.onload=()=>{
-    const maxSize=1280;
+    const maxSize=2048;
     let w=img.width,h=img.height;
     if(w>maxSize||h>maxSize){if(w>h){h=Math.round(h*maxSize/w);w=maxSize;}else{w=Math.round(w*maxSize/h);h=maxSize;}}
     const canvas=document.createElement('canvas');
     canvas.width=w;canvas.height=h;
     canvas.getContext('2d').drawImage(img,0,0,w,h);
-    const compressed=canvas.toDataURL('image/jpeg',0.75);
+    const compressed=canvas.toDataURL('image/jpeg',0.88);
     URL.revokeObjectURL(objectUrl);
     // 6枚満杯なら次ページへ
     const page=projects[currentProjectId].pages[currentPageIndex];
