@@ -81,9 +81,9 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
 .a4-container{margin:0 12px;background:white;border:2px solid var(--navy);border-radius:0 var(--radius) var(--radius) var(--radius);box-shadow:var(--shadow);overflow:hidden}
 .a4-layout{display:flex;flex-direction:column;min-height:500px}
 .map-row{display:grid;grid-template-columns:1fr 1fr;border-bottom:2px solid var(--border);gap:0}
-.map-cell{padding:8px;border-right:2px solid var(--border);display:flex;flex-direction:column;min-height:180px}
+.map-cell{padding:8px;border-right:2px solid var(--border);display:flex;flex-direction:column;min-height:260px}
 .map-cell:last-child{border-right:none}
-@media(min-width:1024px){.map-cell{min-height:220px}}
+@media(min-width:1024px){.map-cell{min-height:320px}}
 .map-cell-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:4px}
 .map-cell-label{font-size:11px;font-weight:700;color:var(--navy)}
 .map-cell-btn{background:var(--orange);color:white;border:none;border-radius:4px;padding:3px 7px;font-size:10px;cursor:pointer;font-weight:600}
@@ -611,23 +611,52 @@ async function openProject(id){
 
 // GPS位置から地図を自動設定
 function autoSetMapFromGPS(){
+  const project=projects[currentProjectId];
+  if(!project)return;
+
+  // まず写真のGPS座標があればそれを優先
+  const page=project.pages[currentPageIndex];
+  const photoCells=page.cells.filter(c=>c.photo&&c.lat);
+  if(photoCells.length>0){
+    const avgLat=photoCells.reduce((s,c)=>s+c.lat,0)/photoCells.length;
+    const avgLng=photoCells.reduce((s,c)=>s+c.lng,0)/photoCells.length;
+    setMapFromPosition(avgLat,avgLng);
+    return;
+  }
+
+  // 写真座標がなければGPSから設定
   if(currentLat){setMapFromPosition(currentLat,currentLng);return;}
-  showToast('GPS位置から地図を自動設定中...');
+
+  // GPS待ち（最大10秒）
   let attempts=0;
   const timer=setInterval(()=>{
     attempts++;
-    if(currentLat){clearInterval(timer);setMapFromPosition(currentLat,currentLng);}
-    else if(attempts>=20){clearInterval(timer);showToast('GPS取得できませんでした。「地図編集」から手動設定してください。');}
+    // GPS取得できたら設定
+    if(currentLat){
+      clearInterval(timer);
+      // 再度写真座標を優先チェック
+      const photoCells2=page.cells.filter(c=>c.photo&&c.lat);
+      if(photoCells2.length>0){
+        const avgLat=photoCells2.reduce((s,c)=>s+c.lat,0)/photoCells2.length;
+        const avgLng=photoCells2.reduce((s,c)=>s+c.lng,0)/photoCells2.length;
+        setMapFromPosition(avgLat,avgLng);
+      }else{
+        setMapFromPosition(currentLat,currentLng);
+      }
+    }else if(attempts>=20){
+      clearInterval(timer);
+    }
   },500);
 }
+
 function setMapFromPosition(lat,lng){
   const project=projects[currentProjectId];if(!project)return;
   const scale=project.mapData.overviewScale||4;
+  // 俯瞰図と視点場図を同じ座標からリンクして設定
   project.mapData.overview={centerLat:lat,centerLng:lng,zoom:Math.max(10,17-scale)};
-  // 現在のページの視点場図を設定
   project.pages[currentPageIndex].mapDetail={centerLat:lat,centerLng:lng,zoom:17};
-  saveCurrentProject();renderMiniMaps();
-  showToast('地図を自動設定しました');
+  saveCurrentProject();
+  renderMiniMaps();
 }
 
 // ===== ページ管理 =====
@@ -791,8 +820,40 @@ function getBoundsForZoom(lat,lng,zoom){const delta=180/(Math.pow(2,zoom)*2);ret
 
 function renderDetailMiniMap(){
   const project=projects[currentProjectId];
-  // ページごとの視点場図を使用
-  const data=project.pages[currentPageIndex].mapDetail;
+  const page=project.pages[currentPageIndex];
+
+  // 写真のGPS座標がある場合、視点場図と俯瞰図の中心を自動調整
+  const photoCells=page.cells.filter(c=>c.photo&&c.lat);
+  if(photoCells.length>0){
+    const avgLat=photoCells.reduce((s,c)=>s+c.lat,0)/photoCells.length;
+    const avgLng=photoCells.reduce((s,c)=>s+c.lng,0)/photoCells.length;
+    let needsUpdate=false;
+
+    // 視点場図の調整
+    if(!page.mapDetail){
+      page.mapDetail={centerLat:avgLat,centerLng:avgLng,zoom:17};
+      needsUpdate=true;
+    }else{
+      const latDiff=Math.abs(avgLat-page.mapDetail.centerLat);
+      const lngDiff=Math.abs(avgLng-page.mapDetail.centerLng);
+      if(latDiff>0.001||lngDiff>0.001){
+        page.mapDetail.centerLat=avgLat;
+        page.mapDetail.centerLng=avgLng;
+        needsUpdate=true;
+      }
+    }
+
+    // 俯瞰図も同じ座標でリンク更新
+    if(needsUpdate){
+      const scale=project.mapData.overviewScale||4;
+      project.mapData.overview={centerLat:avgLat,centerLng:avgLng,zoom:Math.max(10,17-scale)};
+      saveCurrentProject();
+      // 俯瞰図も再描画
+      renderOverviewMiniMap();
+    }
+  }
+
+  const data=page.mapDetail;
   const wrap=document.getElementById('detailWrap');
   if(!data){wrap.innerHTML=`<div class="map-placeholder"><span class="icon">📍</span><span>「地図編集」で設定</span></div>`;return}
   wrap.innerHTML='';wrap.style.minHeight='160px';
