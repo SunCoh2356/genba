@@ -163,14 +163,13 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
   .print-area,.print-area *{visibility:visible}
   .print-area{position:fixed;left:0;top:0;width:100%}
 }
-#cameraInput,#libraryInput,#importInput{display:none}
+#cameraInput,#libraryInput{display:none}
 .page-tabs::-webkit-scrollbar{display:none}
 </style>
 </head>
 <body>
 <input type="file" id="cameraInput" accept="image/*" capture="environment">
 <input type="file" id="libraryInput" accept="image/*" multiple>
-<input type="file" id="importInput" accept=".json">
 
 <!-- 現場一覧 -->
 <div class="screen active" id="screen-list">
@@ -178,6 +177,7 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
     <h1>📋 現場台帳</h1>
     <div class="header-right">
       <button class="btn btn-secondary btn-sm" onclick="document.getElementById('importInput').click()">📥 取込</button>
+      <input type="file" id="importInput" accept=".json" style="display:none" onchange="importFile(this)">
       <button class="btn btn-primary btn-sm" onclick="openNewProjectModal()">＋ 新規現場</button>
     </div>
   </div>
@@ -1296,39 +1296,36 @@ document.querySelectorAll('.modal-overlay').forEach(o=>{o.addEventListener('clic
 let toastTimer=null;
 function showToast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');if(toastTimer)clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),2500)}
 
-function initImport(){
-  const input=document.getElementById('importInput');
-  if(!input)return;
-  input.onchange=function(){
-    const file=this.files[0];const inputEl=this;
-    if(!file)return;
-    showToast('取込中...');
-    const reader=new FileReader();
-    reader.onload=function(e){
-      try{
-        const project=JSON.parse(e.target.result);
-        if(!project.id||!project.pages){showToast('このファイルは現場台帳データではありません');inputEl.value='';return}
-        if(!project.mapData)project.mapData={overview:null,overviewScale:4};
-        // 互換性対応：古いmapData.detailをページごとのmapDetailに変換
-        const sharedDetail=project.mapData.detail||null;
-        delete project.mapData.detail;
-        if(!project.mapData.overview&&sharedDetail)project.mapData.overview=sharedDetail;
-        project.pages.forEach(page=>{
-          if(!page.mapDetail)page.mapDetail=sharedDetail;
-          if(!page.cells||!Array.isArray(page.cells))page.cells=[];
-          while(page.cells.length<6)page.cells.push({index:page.cells.length,photo:null,comment:'',lat:null,lng:null,heading:null});
-        });
-        loadAllProjects().then(all=>{
-          const exists=all.find(p=>p.id===project.id);
-          if(exists){project.id='proj_'+Date.now();project.siteName=(project.siteName||'')+'（取込）';}
-          saveProject(project).then(()=>{renderProjectList();showToast(`「${project.siteName}」を取り込みました`);});
-        });
-      }catch(err){showToast('取込エラー: '+err.message);console.error(err)}
-      inputEl.value='';
-    };
-    reader.readAsText(file,'UTF-8');
+function importFile(inputEl){
+  const file=inputEl.files[0];
+  if(!file)return;
+  showToast('取込中...');
+  const reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      const project=JSON.parse(e.target.result);
+      if(!project.id||!project.pages){showToast('このファイルは現場台帳データではありません');inputEl.value='';return}
+      if(!project.mapData)project.mapData={overview:null,overviewScale:4};
+      const sharedDetail=project.mapData.detail||null;
+      delete project.mapData.detail;
+      if(!project.mapData.overview&&sharedDetail)project.mapData.overview=sharedDetail;
+      project.pages.forEach(page=>{
+        if(!page.mapDetail)page.mapDetail=sharedDetail;
+        if(!page.cells||!Array.isArray(page.cells))page.cells=[];
+        while(page.cells.length<6)page.cells.push({index:page.cells.length,photo:null,comment:'',lat:null,lng:null,heading:null});
+      });
+      loadAllProjects().then(all=>{
+        const exists=all.find(p=>p.id===project.id);
+        if(exists){project.id='proj_'+Date.now();project.siteName=(project.siteName||'')+'（取込）';}
+        saveProject(project).then(()=>{renderProjectList();showToast(`「${project.siteName}」を取り込みました`);});
+      });
+    }catch(err){showToast('取込エラー: '+err.message);console.error(err);}
+    inputEl.value='';
   };
+  reader.readAsText(file,'UTF-8');
 }
+
+function initImport(){}
 
 (async()=>{await initDB();renderProjectList();initImport()})();
 </script>
