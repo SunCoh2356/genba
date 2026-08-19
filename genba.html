@@ -475,8 +475,19 @@ function requestCompassPermission(){
 }
 function startCompassListener(){
   window.addEventListener('deviceorientation',e=>{
-    const h=e.webkitCompassHeading!==undefined?e.webkitCompassHeading:e.alpha;
+    let h=e.webkitCompassHeading!==undefined?e.webkitCompassHeading:e.alpha;
     if(h===null||h===undefined)return;
+    // iPhoneの持ち方による補正
+    const orientation=window.screen.orientation?window.screen.orientation.angle:(window.orientation||0);
+    if(orientation===90){
+      // 横持ち（右）：-90度補正
+      h=(h+270)%360;
+    }else if(orientation===-90||orientation===270){
+      // 横持ち（左）：90度補正
+      h=(h+90)%360;
+    }else{
+      // 縦持ち：補正なし
+    }
     currentHeading=Math.round(h);
     document.getElementById('compassDot').className='s-dot active';
     document.getElementById('compassLabel').textContent=headingToLabel(currentHeading);
