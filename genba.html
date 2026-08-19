@@ -451,37 +451,17 @@ function getLocalDateString(){const d=new Date();return`${d.getFullYear()}-${Str
 
 // ===== GPS =====
 function startGPS(){
-  if(!navigator.geolocation){
-    document.getElementById('gpsDot').className='s-dot';
-    document.getElementById('gpsLabel').textContent='GPS非対応';
-    return;
-  }
+  if(!navigator.geolocation)return;
   document.getElementById('gpsDot').className='s-dot waiting';
   document.getElementById('gpsLabel').textContent='GPS取得中...';
-
-  // まず一回だけ取得してみる（許可ダイアログを出すため）
-  navigator.geolocation.getCurrentPosition(pos=>{
+  gpsWatchId=navigator.geolocation.watchPosition(pos=>{
     currentLat=pos.coords.latitude;currentLng=pos.coords.longitude;
     document.getElementById('gpsDot').className='s-dot active';
     document.getElementById('gpsLabel').textContent=`${currentLat.toFixed(4)},${currentLng.toFixed(4)}`;
-    // 取得成功したら継続監視を開始
-    gpsWatchId=navigator.geolocation.watchPosition(pos2=>{
-      currentLat=pos2.coords.latitude;currentLng=pos2.coords.longitude;
-      document.getElementById('gpsDot').className='s-dot active';
-      document.getElementById('gpsLabel').textContent=`${currentLat.toFixed(4)},${currentLng.toFixed(4)}`;
-    },()=>{},{enableHighAccuracy:true,timeout:30000,maximumAge:5000});
   },err=>{
     document.getElementById('gpsDot').className='s-dot';
-    if(err.code===1){
-      document.getElementById('gpsLabel').textContent='GPS許可が必要です';
-      showToast('設定→プライバシー→位置情報サービス→Safariを「許可」にしてください');
-    }else if(err.code===2){
-      document.getElementById('gpsLabel').textContent='GPS信号なし';
-      showToast('GPS信号が取得できません。屋外で試してください。');
-    }else{
-      document.getElementById('gpsLabel').textContent='GPS取得失敗';
-    }
-  },{enableHighAccuracy:true,timeout:15000,maximumAge:0});
+    document.getElementById('gpsLabel').textContent='GPS取得失敗('+err.code+')';
+  },{enableHighAccuracy:true,timeout:30000,maximumAge:10000});
 }
 
 // ===== コンパス =====
