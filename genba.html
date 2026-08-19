@@ -140,8 +140,8 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
 /* PDF印刷プレビュー - A4縦 両面印刷対応 */
 .preview-page{background:white;border:1px solid var(--border);margin-bottom:20px;box-shadow:var(--shadow);width:100%;max-width:794px;margin-left:auto;margin-right:auto;padding:20px;box-sizing:border-box}
 .preview-header{background:#1B2A4A;color:white;padding:4px 10px;font-size:9px;display:flex;gap:10px;align-items:center;border-radius:3px;margin-bottom:8px;flex-wrap:nowrap;overflow:hidden;white-space:nowrap}
-.preview-header span{flex-shrink:0}
-.preview-header b{font-weight:700}
+.preview-header span{flex-shrink:0;color:white}
+.preview-header b{font-weight:700;color:white}
 .preview-maps{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;height:240px}
 .preview-map-box{border:1px solid var(--border);border-radius:4px;overflow:hidden;display:flex;flex-direction:column}
 .preview-map-label{background:#1B2A4A;color:white;padding:3px 6px;font-size:9px;font-weight:700;flex-shrink:0}
@@ -158,12 +158,14 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
 
 @media print{
   @page{size:A4 portrait;margin:20mm}
-  body *{visibility:hidden}
-  #screen-preview,#screen-preview *{visibility:visible}
-  #screen-preview{position:fixed;left:0;top:0;width:100%;background:white}
+  body{visibility:hidden}
+  #screen-preview{visibility:visible;position:fixed;left:0;top:0;width:100%;background:white}
+  #screen-preview *{visibility:visible}
   .app-header,.action-bar{display:none!important}
   .preview-page{box-shadow:none;border:none;page-break-after:always;max-width:100%;padding:0;margin:0}
   #previewContent{padding:0}
+  .preview-header,.preview-map-label,.preview-photo-header{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  img{-webkit-print-color-adjust:exact;print-color-adjust:exact;max-width:100%}
 }
 #cameraInput,#libraryInput{display:none}
 .page-tabs::-webkit-scrollbar{display:none}
@@ -377,7 +379,7 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
   <div class="app-header">
     <button class="back-btn" onclick="showScreen('screen-ledger')">← 戻る</button>
     <h1>印刷プレビュー（A4縦）</h1>
-    <button class="btn btn-primary btn-sm" onclick="window.print()">🖨️ 印刷</button>
+    <button class="btn btn-primary btn-sm" onclick="printWithGuide()">🖨️ 印刷</button>
   </div>
   <div style="padding:16px;padding-bottom:100px;background:var(--bg)" id="previewContent"></div>
 </div>
@@ -1480,6 +1482,11 @@ function exportCsvOnly(){
   setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 
+function printWithGuide(){
+  alert('印刷ダイアログが開いたら以下を設定してください：\n\n・「詳細設定」または「その他の設定」を開く\n・「ヘッダーとフッター」のチェックを外す\n・「背景のグラフィック」にチェックを入れる\n・用紙サイズ：A4\n・向き：縦\n\nOKをクリックすると印刷ダイアログが開きます');
+  window.print();
+}
+
 function openPrintPreview(){
   closeModal('exportModal');
   const project=projects[currentProjectId];
@@ -1536,33 +1543,30 @@ function openPrintPreview(){
 
   // 地図画像をキャプチャして埋め込む
   setTimeout(()=>{
+    // 俯瞰図（赤枠付き）
     if(overviewMiniMap){
       try{
         leafletImage(overviewMiniMap,(err,canvas)=>{
           if(err)return;
-          const img=document.createElement('img');
-          img.src=canvas.toDataURL();
-          img.style.cssText='width:100%;height:100%;object-fit:cover';
+          const dataUrl=canvas.toDataURL('image/png');
           document.querySelectorAll('[id^="previewOverview_"]').forEach(el=>{
-            el.innerHTML='';el.appendChild(img.cloneNode());
+            el.innerHTML=`<img src="${dataUrl}" style="width:100%;height:100%;object-fit:cover">`;
           });
         });
-      }catch(e){}
+      }catch(e){console.error('俯瞰図キャプチャエラー:',e)}
     }
+    // 視点場図（マーカー・矢印付き）
     if(detailMiniMap){
       try{
         leafletImage(detailMiniMap,(err,canvas)=>{
           if(err)return;
-          const img=document.createElement('img');
-          img.src=canvas.toDataURL();
-          img.style.cssText='width:100%;height:100%;object-fit:cover';
-          // 現在ページのみ地図画像を表示
+          const dataUrl=canvas.toDataURL('image/png');
           const el=document.getElementById(`previewDetail_${currentPageIndex}`);
-          if(el){el.innerHTML='';el.appendChild(img.cloneNode());}
+          if(el)el.innerHTML=`<img src="${dataUrl}" style="width:100%;height:100%;object-fit:cover">`;
         });
-      }catch(e){}
+      }catch(e){console.error('視点場図キャプチャエラー:',e)}
     }
-  },300);
+  },500);
 
   showScreen('screen-preview');
 }
