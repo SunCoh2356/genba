@@ -174,6 +174,7 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
   <div class="app-header">
     <h1>📋 現場台帳</h1>
     <div class="header-right">
+      <button class="btn-ghost" onclick="toggleHomeGuide()" style="color:white;font-size:16px">❓</button>
       <button class="btn btn-secondary btn-sm" onclick="document.getElementById('importInput').click()">📥 取込</button>
       <input type="file" id="importInput" accept=".json" style="display:none" onchange="importFile(this)">
       <button class="btn btn-primary btn-sm" onclick="openNewProjectModal()">＋ 新規現場</button>
@@ -185,6 +186,15 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
     </div>
     <div id="projectList">
       <div class="empty-state"><div class="icon">🏗️</div><p>現場がまだ登録されていません。<br>「新規現場」から追加してください。</p></div>
+    </div>
+    <!-- ホーム画面追加の案内 -->
+    <div id="homeScreenGuide" style="margin-top:20px;padding:12px;background:white;border-radius:var(--radius);box-shadow:var(--shadow);font-size:12px;color:var(--text-sub);line-height:1.8;display:none">
+      <div style="font-weight:700;color:var(--navy);margin-bottom:6px">📱 ホーム画面への追加手順</div>
+      <div>① iPhoneのSafariでこのページを開く</div>
+      <div>② 画面下の共有ボタン（□↑）をタップ</div>
+      <div>③ 「ホーム画面に追加」をタップ</div>
+      <div>④ 「追加」をタップして完了</div>
+      <div style="margin-top:8px;color:var(--danger);font-size:11px">※ GPS・位置情報が使えない場合は<br>　設定→Safari→Webサイトのデータを削除<br>　してからアプリを開き直してください</div>
     </div>
   </div>
 </div>
@@ -232,6 +242,7 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
       <div class="sensor-item"><span class="s-dot" id="gpsDot"></span><span id="gpsLabel">GPS待機中</span></div>
       <div class="sensor-item"><span class="s-dot" id="compassDot"></span><span id="compassLabel">コンパス待機中</span><span id="compassArrow" style="font-size:14px;margin-left:2px">↑</span></div>
       <button id="compassPermBtn" onclick="requestCompassPermission()" style="background:var(--orange);color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;display:none">🧭 方位許可</button>
+      <button onclick="flipHeading()" style="background:var(--navy);color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer">🔄 方位反転</button>
       <button id="gpsHelpBtn" onclick="showGpsHelp()" style="background:var(--danger);color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;display:none">❓ GPS対処</button>
     </div>
     <div class="page-tabs" id="pageTabs"></div>
@@ -467,6 +478,11 @@ function startGPS(){
   },{enableHighAccuracy:true,timeout:30000,maximumAge:10000});
 }
 
+function toggleHomeGuide(){
+  const el=document.getElementById('homeScreenGuide');
+  el.style.display=el.style.display==='none'?'block':'none';
+}
+
 function showGpsHelp(){
   alert('GPS取得できない場合の対処方法\n\n① 設定→プライバシーとセキュリティ→位置情報サービス→Safari→「このAppの使用中のみ許可」を確認\n\n② 設定→Safari→「Webサイトのデータを削除」を実行してからアプリを開き直す\n\n③ iPhoneを再起動してから再度試す\n\n④ 屋外または窓際で試す（屋内ではGPSが取れにくい場合があります）');
 }
@@ -480,6 +496,12 @@ function requestCompassPermission(){
     }).catch(e=>showToast('方位許可エラー'));
   }
 }
+let headingFlipped=false;
+function flipHeading(){
+  headingFlipped=!headingFlipped;
+  showToast(headingFlipped?'方位を180度反転しました':'方位を元に戻しました');
+}
+
 function startCompassListener(){
   window.addEventListener('deviceorientation',e=>{
     let h=e.webkitCompassHeading!==undefined?e.webkitCompassHeading:e.alpha;
@@ -487,14 +509,14 @@ function startCompassListener(){
     // iPhoneの持ち方による補正
     const orientation=window.screen.orientation?window.screen.orientation.angle:(window.orientation||0);
     if(orientation===90){
-      // 横持ち（右）：-90度補正
+      // 横持ち（ホームボタン右・カメラ左）：-90度補正
       h=(h+270)%360;
     }else if(orientation===-90||orientation===270){
-      // 横持ち（左）：90度補正
+      // 横持ち（ホームボタン左・カメラ右）：+90度補正
       h=(h+90)%360;
-    }else{
-      // 縦持ち：補正なし
     }
+    // 反転フラグが有効な場合は180度補正
+    if(headingFlipped)h=(h+180)%360;
     currentHeading=Math.round(h);
     document.getElementById('compassDot').className='s-dot active';
     document.getElementById('compassLabel').textContent=headingToLabel(currentHeading);
