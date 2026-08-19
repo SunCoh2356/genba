@@ -496,7 +496,7 @@ function requestCompassPermission(){
     }).catch(e=>showToast('方位許可エラー'));
   }
 }
-let headingFlipped=true; // 横持ち時は180度補正（デフォルトON）
+let headingFlipped=false;
 function flipHeading(){
   headingFlipped=!headingFlipped;
   showToast(headingFlipped?'方位を反転しました（現在：反転ON）':'方位を元に戻しました（現在：反転OFF）');
@@ -506,7 +506,9 @@ function startCompassListener(){
   window.addEventListener('deviceorientation',e=>{
     let h=e.webkitCompassHeading!==undefined?e.webkitCompassHeading:e.alpha;
     if(h===null||h===undefined)return;
-    // 補正なし（縦持ちで正確、横持ちは反転ボタンで調整）
+    // カメラ左横持ち：-90度補正
+    h=(h+270)%360;
+    // 反転フラグ
     if(headingFlipped)h=(h+180)%360;
     currentHeading=Math.round(h);
     document.getElementById('compassDot').className='s-dot active';
