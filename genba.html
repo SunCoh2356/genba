@@ -295,27 +295,38 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
     <div></div>
   </div>
   <!-- 上段：視点場図 -->
-  <div style="position:relative;height:45vh;background:#1B2A4A">
+  <div style="position:relative;height:40vh;background:#1B2A4A">
     <div id="cameraMap" style="width:100%;height:100%"></div>
-    <!-- 現在の方位表示 -->
-    <div style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,0.6);color:white;padding:6px 10px;border-radius:8px;font-size:13px;font-weight:700" id="cameraHeadingLabel">方位: ---</div>
-    <div style="position:absolute;top:8px;right:8px;font-size:32px;transition:transform 0.3s" id="cameraHeadingArrow">↑</div>
     <div style="position:absolute;bottom:4px;right:4px;font-size:8px;color:rgba(255,255,255,0.6)">©国土地理院</div>
   </div>
-  <!-- 下段：方位と撮影ボタン -->
-  <div style="padding:16px;display:flex;flex-direction:column;align-items:center;gap:16px;background:var(--bg)">
-    <div style="font-size:13px;color:var(--text-sub);text-align:center">地図の矢印方向に向けてから撮影してください</div>
-    <!-- 大きな方位コンパス表示 -->
-    <div style="display:flex;align-items:center;gap:12px">
-      <div style="font-size:48px;transition:transform 0.3s" id="cameraBigArrow">↑</div>
-      <div>
-        <div style="font-size:24px;font-weight:700;color:var(--navy)" id="cameraBigHeading">---</div>
-        <div style="font-size:12px;color:var(--text-sub)">撮影方向</div>
+  <!-- 下段：方位スライダーと撮影ボタン -->
+  <div style="padding:12px;display:flex;flex-direction:column;align-items:center;gap:12px;background:var(--bg)">
+    <!-- 方位表示 -->
+    <div style="display:flex;align-items:center;gap:16px">
+      <div style="font-size:40px;transition:transform 0.2s" id="cameraBigArrow">↑</div>
+      <div style="text-align:center">
+        <div style="font-size:22px;font-weight:700;color:var(--navy)" id="cameraBigHeading">---</div>
+        <div style="font-size:11px;color:var(--text-sub)">撮影方向</div>
       </div>
     </div>
+    <!-- 方位スライダー -->
+    <div style="width:100%;display:flex;align-items:center;gap:8px">
+      <span style="font-size:11px;color:var(--text-sub)">W</span>
+      <input type="range" id="cameraHeadingSlider" min="0" max="359" value="0"
+        oninput="onCameraSliderChange(this.value)"
+        style="flex:1;-webkit-appearance:none;height:8px;border-radius:4px;background:linear-gradient(to right,var(--navy),var(--orange),var(--navy));outline:none">
+      <span style="font-size:11px;color:var(--text-sub)">E</span>
+    </div>
+    <div style="display:flex;gap:8px;width:100%;justify-content:center">
+      <button onclick="adjustHeading(-5)"
+        style="background:var(--navy);color:white;border:none;border-radius:6px;padding:8px 16px;font-size:16px;cursor:pointer">◀ 5°</button>
+      <button onclick="syncCompassToSlider()"
+        style="background:var(--orange);color:white;border:none;border-radius:6px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer">🧭 コンパス同期</button>
+      <button onclick="adjustHeading(5)"
+        style="background:var(--navy);color:white;border:none;border-radius:6px;padding:8px 16px;font-size:16px;cursor:pointer">5° ▶</button>
+    </div>
     <!-- 撮影ボタン -->
-    <button onclick="triggerCameraFromScreen()" style="width:80px;height:80px;border-radius:50%;background:var(--orange);border:4px solid white;box-shadow:0 4px 12px rgba(0,0,0,0.3);font-size:32px;cursor:pointer">📷</button>
-    <div style="font-size:12px;color:var(--text-sub)">タップして撮影</div>
+    <button onclick="triggerCameraFromScreen()" style="width:72px;height:72px;border-radius:50%;background:var(--orange);border:4px solid white;box-shadow:0 4px 12px rgba(0,0,0,0.3);font-size:28px;cursor:pointer">📷</button>
   </div>
 </div>
 
@@ -1036,6 +1047,44 @@ let cameraMarker=null;
 let cameraArrowLine=null;
 let cameraArrowHead=null;
 let cameraHeadingInterval=null;
+let currentCameraHeading=0;
+
+function onCameraSliderChange(val){
+  currentCameraHeading=parseInt(val);
+  document.getElementById('cameraHeadingSlider').value=currentCameraHeading;
+  document.getElementById('cameraBigArrow').style.transform=`rotate(${currentCameraHeading}deg)`;
+  document.getElementById('cameraBigHeading').textContent=headingToLabel(currentCameraHeading);
+  updateCameraArrowOnMap(currentCameraHeading);
+}
+
+function syncCompassToSlider(){
+  if(currentHeading===null){showToast('コンパスが取得できていません');return;}
+  currentCameraHeading=currentHeading;
+  document.getElementById('cameraHeadingSlider').value=currentCameraHeading;
+  document.getElementById('cameraBigArrow').style.transform=`rotate(${currentCameraHeading}deg)`;
+  document.getElementById('cameraBigHeading').textContent=headingToLabel(currentCameraHeading);
+  updateCameraArrowOnMap(currentCameraHeading);
+  showToast(`コンパス値 ${headingToLabel(currentCameraHeading)} を反映しました`);
+}
+
+function adjustHeading(delta){
+  currentCameraHeading=(currentCameraHeading+delta+360)%360;
+  document.getElementById('cameraHeadingSlider').value=currentCameraHeading;
+  document.getElementById('cameraBigArrow').style.transform=`rotate(${currentCameraHeading}deg)`;
+  document.getElementById('cameraBigHeading').textContent=headingToLabel(currentCameraHeading);
+  updateCameraArrowOnMap(currentCameraHeading);
+}
+
+function updateCameraArrowOnMap(h){
+  if(!cameraMap||!currentLat)return;
+  if(cameraArrowLine)try{cameraMap.removeLayer(cameraArrowLine)}catch(e){}
+  if(cameraArrowHead)try{cameraMap.removeLayer(cameraArrowHead)}catch(e){}
+  const rad=h*Math.PI/180,len=0.0006;
+  const endLat=currentLat+len*Math.cos(rad),endLng=currentLng+len*Math.sin(rad)/Math.cos(currentLat*Math.PI/180);
+  cameraArrowLine=L.polyline([[currentLat,currentLng],[endLat,endLng]],{color:'#1565C0',weight:4}).addTo(cameraMap);
+  const arrowIcon=L.divIcon({className:'',html:`<svg width="24" height="24" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg" style="transform:rotate(${h}deg);transform-origin:center;overflow:visible"><polygon points="10,2 16,18 10,14 4,18" fill="#1565C0" stroke="white" stroke-width="1.5"/></svg>`,iconSize:[24,24],iconAnchor:[12,12]});
+  cameraArrowHead=L.marker([endLat,endLng],{icon:arrowIcon,interactive:false}).addTo(cameraMap);
+}
 
 function openCameraScreen(cellIndex){
   closeModal('photoModal');
@@ -1045,9 +1094,15 @@ function openCameraScreen(cellIndex){
   const sn=currentPageIndex*6;
   const num=sn+cellIndex+1;
   document.getElementById('cameraScreenTitle').textContent=`視点場${toKanji(num)} 撮影`;
+
+  // 現在のコンパス値でスライダーを初期化
+  currentCameraHeading=currentHeading||0;
+  document.getElementById('cameraHeadingSlider').value=currentCameraHeading;
+  document.getElementById('cameraBigArrow').style.transform=`rotate(${currentCameraHeading}deg)`;
+  document.getElementById('cameraBigHeading').textContent=headingToLabel(currentCameraHeading);
+
   showScreen('screen-camera');
 
-  // 地図初期化
   if(cameraMap){cameraMap.remove();cameraMap=null;}
   setTimeout(()=>{
     const data=page.mapDetail;
@@ -1055,60 +1110,27 @@ function openCameraScreen(cellIndex){
     const zoom=data?data.zoom:17;
     cameraMap=L.map('cameraMap').setView(center,zoom);
     L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',{attribution:'©国土地理院',maxZoom:18}).addTo(cameraMap);
-
-    // 既存の視点場マーカーを表示
     page.cells.forEach((cell,i)=>{
       if(!cell.photo||!cell.lat)return;
       const n=sn+i+1;
       const icon=L.divIcon({className:'',html:`<div style="background:#E8671B;color:white;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;border:2px solid white">${n}</div>`,iconSize:[22,22],iconAnchor:[11,11]});
       L.marker([cell.lat,cell.lng],{icon}).addTo(cameraMap);
     });
-
-    // 現在地マーカー（青）
     if(currentLat){
       const myIcon=L.divIcon({className:'',html:`<div style="background:#1565C0;color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;border:2px solid white">現</div>`,iconSize:[20,20],iconAnchor:[10,10]});
       cameraMarker=L.marker([currentLat,currentLng],{icon:myIcon}).addTo(cameraMap);
     }
-
     cameraMap.invalidateSize();
-    updateCameraHeadingDisplay();
+    updateCameraArrowOnMap(currentCameraHeading);
   },300);
-
-  // 方位のリアルタイム更新
-  cameraHeadingInterval=setInterval(updateCameraHeadingDisplay,200);
-}
-
-function updateCameraHeadingDisplay(){
-  if(currentHeading===null)return;
-  const h=currentHeading;
-  // 方位ラベル更新
-  document.getElementById('cameraHeadingLabel').textContent=`方位: ${headingToLabel(h)}`;
-  document.getElementById('cameraHeadingArrow').style.transform=`rotate(${h}deg)`;
-  document.getElementById('cameraBigArrow').style.transform=`rotate(${h}deg)`;
-  document.getElementById('cameraBigHeading').textContent=headingToLabel(h);
-
-  // 現在地から方向矢印を更新
-  if(cameraMap&&currentLat){
-    if(cameraMarker)cameraMap.removeLayer(cameraMarker);
-    const myIcon=L.divIcon({className:'',html:`<div style="background:#1565C0;color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;border:2px solid white">現</div>`,iconSize:[20,20],iconAnchor:[10,10]});
-    cameraMarker=L.marker([currentLat,currentLng],{icon:myIcon}).addTo(cameraMap);
-
-    if(cameraArrowLine)try{cameraMap.removeLayer(cameraArrowLine)}catch(e){}
-    if(cameraArrowHead)try{cameraMap.removeLayer(cameraArrowHead)}catch(e){}
-    const rad=h*Math.PI/180,len=0.0006;
-    const endLat=currentLat+len*Math.cos(rad),endLng=currentLng+len*Math.sin(rad)/Math.cos(currentLat*Math.PI/180);
-    cameraArrowLine=L.polyline([[currentLat,currentLng],[endLat,endLng]],{color:'#1565C0',weight:4}).addTo(cameraMap);
-    const arrowIcon=L.divIcon({className:'',html:`<svg width="24" height="24" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg" style="transform:rotate(${h}deg);transform-origin:center;overflow:visible"><polygon points="10,2 16,18 10,14 4,18" fill="#1565C0" stroke="white" stroke-width="1.5"/></svg>`,iconSize:[24,24],iconAnchor:[12,12]});
-    cameraArrowHead=L.marker([endLat,endLng],{icon:arrowIcon,interactive:false}).addTo(cameraMap);
-  }
 }
 
 function triggerCameraFromScreen(){
+  currentHeading=currentCameraHeading;
   document.getElementById('cameraInput').click();
 }
 
 function closeCameraScreen(){
-  if(cameraHeadingInterval){clearInterval(cameraHeadingInterval);cameraHeadingInterval=null;}
   if(cameraMap){cameraMap.remove();cameraMap=null;}
   showScreen('screen-ledger');
 }
