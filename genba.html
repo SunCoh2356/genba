@@ -496,7 +496,7 @@ function requestCompassPermission(){
     }).catch(e=>showToast('方位許可エラー'));
   }
 }
-let headingFlipped=true;
+let headingFlipped=false;
 function flipHeading(){
   headingFlipped=!headingFlipped;
   showToast(headingFlipped?'方位を反転しました（現在：反転ON）':'方位を元に戻しました（現在：反転OFF）');
