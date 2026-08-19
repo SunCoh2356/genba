@@ -232,6 +232,7 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
       <div class="sensor-item"><span class="s-dot" id="gpsDot"></span><span id="gpsLabel">GPS待機中</span></div>
       <div class="sensor-item"><span class="s-dot" id="compassDot"></span><span id="compassLabel">コンパス待機中</span><span id="compassArrow" style="font-size:14px;margin-left:2px">↑</span></div>
       <button id="compassPermBtn" onclick="requestCompassPermission()" style="background:var(--orange);color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;display:none">🧭 方位許可</button>
+      <button id="gpsHelpBtn" onclick="showGpsHelp()" style="background:var(--danger);color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;display:none">❓ GPS対処</button>
     </div>
     <div class="page-tabs" id="pageTabs"></div>
     <div class="a4-container">
@@ -458,10 +459,16 @@ function startGPS(){
     currentLat=pos.coords.latitude;currentLng=pos.coords.longitude;
     document.getElementById('gpsDot').className='s-dot active';
     document.getElementById('gpsLabel').textContent=`${currentLat.toFixed(4)},${currentLng.toFixed(4)}`;
+    document.getElementById('gpsHelpBtn').style.display='none';
   },err=>{
     document.getElementById('gpsDot').className='s-dot';
-    document.getElementById('gpsLabel').textContent='GPS取得失敗('+err.code+')';
+    document.getElementById('gpsLabel').textContent='GPS取得失敗';
+    document.getElementById('gpsHelpBtn').style.display='inline-block';
   },{enableHighAccuracy:true,timeout:30000,maximumAge:10000});
+}
+
+function showGpsHelp(){
+  alert('GPS取得できない場合の対処方法\n\n① 設定→プライバシーとセキュリティ→位置情報サービス→Safari→「このAppの使用中のみ許可」を確認\n\n② 設定→Safari→「Webサイトのデータを削除」を実行してからアプリを開き直す\n\n③ iPhoneを再起動してから再度試す\n\n④ 屋外または窓際で試す（屋内ではGPSが取れにくい場合があります）');
 }
 
 // ===== コンパス =====
