@@ -862,7 +862,13 @@ function handleFileInput(e){
     const cell=projects[currentProjectId].pages[currentPageIndex].cells[activeCellIndex];
     cell.photo=compressed;
     if(currentLat){cell.lat=currentLat;cell.lng=currentLng;}
-    if(currentHeading!==null)cell.heading=currentHeading;
+    // 撮影専用画面からの場合はスライダー値を優先、それ以外はコンパス値
+    if(cameraScreenHeading!==null){
+      cell.heading=cameraScreenHeading;
+      cameraScreenHeading=null;
+    }else if(currentHeading!==null){
+      cell.heading=currentHeading;
+    }
     saveCurrentProject();renderPhotoGrid();updateDetailMiniMap();
     const kb=Math.round(compressed.length*0.75/1024);
     showToast(`写真を追加しました（${kb}KB）`+(currentLat?' 📍GPS記録済み':''));
@@ -1143,13 +1149,12 @@ function openCameraScreen(cellIndex){
   },300);
 }
 
+let cameraScreenHeading=null; // 撮影専用画面からの撮影時の方向
+
 function triggerCameraFromScreen(){
-  // スライダーの値を一時的にcurrentHeadingに設定してから撮影
-  const savedHeading=currentHeading;
-  currentHeading=currentCameraHeading;
+  // スライダーの値を専用変数に保存してから撮影
+  cameraScreenHeading=currentCameraHeading;
   document.getElementById('cameraInput').click();
-  // 少し後に元の値に戻す
-  setTimeout(()=>{currentHeading=savedHeading;},2000);
 }
 
 function closeCameraScreen(){
