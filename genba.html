@@ -287,6 +287,38 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
   </div>
 </div>
 
+<!-- 撮影専用画面 -->
+<div class="screen" id="screen-camera">
+  <div class="app-header">
+    <button class="back-btn" onclick="closeCameraScreen()">← 戻る</button>
+    <h1 id="cameraScreenTitle">視点場① 撮影</h1>
+    <div></div>
+  </div>
+  <!-- 上段：視点場図 -->
+  <div style="position:relative;height:45vh;background:#1B2A4A">
+    <div id="cameraMap" style="width:100%;height:100%"></div>
+    <!-- 現在の方位表示 -->
+    <div style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,0.6);color:white;padding:6px 10px;border-radius:8px;font-size:13px;font-weight:700" id="cameraHeadingLabel">方位: ---</div>
+    <div style="position:absolute;top:8px;right:8px;font-size:32px;transition:transform 0.3s" id="cameraHeadingArrow">↑</div>
+    <div style="position:absolute;bottom:4px;right:4px;font-size:8px;color:rgba(255,255,255,0.6)">©国土地理院</div>
+  </div>
+  <!-- 下段：方位と撮影ボタン -->
+  <div style="padding:16px;display:flex;flex-direction:column;align-items:center;gap:16px;background:var(--bg)">
+    <div style="font-size:13px;color:var(--text-sub);text-align:center">地図の矢印方向に向けてから撮影してください</div>
+    <!-- 大きな方位コンパス表示 -->
+    <div style="display:flex;align-items:center;gap:12px">
+      <div style="font-size:48px;transition:transform 0.3s" id="cameraBigArrow">↑</div>
+      <div>
+        <div style="font-size:24px;font-weight:700;color:var(--navy)" id="cameraBigHeading">---</div>
+        <div style="font-size:12px;color:var(--text-sub)">撮影方向</div>
+      </div>
+    </div>
+    <!-- 撮影ボタン -->
+    <button onclick="triggerCameraFromScreen()" style="width:80px;height:80px;border-radius:50%;background:var(--orange);border:4px solid white;box-shadow:0 4px 12px rgba(0,0,0,0.3);font-size:32px;cursor:pointer">📷</button>
+    <div style="font-size:12px;color:var(--text-sub)">タップして撮影</div>
+  </div>
+</div>
+
 <!-- 位置・方向調整画面 -->
 <div class="screen" id="screen-adjust">
   <div class="app-header">
@@ -406,7 +438,7 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
     <div class="modal-handle"></div>
     <h3 id="photoModalTitle">写真を追加</h3>
     <div>
-      <button class="action-sheet-btn" onclick="triggerCamera()"><span class="icon">📷</span>カメラで撮影（GPS・方位自動取得）</button>
+      <button class="action-sheet-btn" onclick="closeModal('photoModal');openCameraScreen(activeCellIndex)"><span class="icon">📷</span>カメラで撮影（地図・方位確認付き）</button>
       <button class="action-sheet-btn" onclick="triggerLibrary()"><span class="icon">🖼️</span>ライブラリから選択</button>
       <button class="action-sheet-btn" id="retakeBtn" onclick="retakePhoto()" style="display:none"><span class="icon">🔄</span>撮り直す</button>
       <button class="action-sheet-btn" id="adjustBtn" onclick="openAdjustModal()" style="display:none"><span class="icon">📍</span>位置・方向を調整</button>
@@ -781,6 +813,7 @@ function openPhotoOptions(i){
   openModal('photoModal');
 }
 function triggerCamera(){closeModal('photoModal');document.getElementById('cameraInput').click()}
+function triggerCameraFromScreen(){document.getElementById('cameraInput').click()}
 function triggerLibrary(){closeModal('photoModal');document.getElementById('libraryInput').click()}
 function retakePhoto(){closeModal('photoModal');document.getElementById('cameraInput').click()}
 function deletePhoto(){
@@ -997,7 +1030,90 @@ function confirmMapArea(){
   saveCurrentProject();closeMapModal();renderMiniMaps();showToast('地図範囲を保存しました');
 }
 
-// ===== 位置・方向調整 =====
+// ===== 撮影専用画面 =====
+let cameraMap=null;
+let cameraMarker=null;
+let cameraArrowLine=null;
+let cameraArrowHead=null;
+let cameraHeadingInterval=null;
+
+function openCameraScreen(cellIndex){
+  closeModal('photoModal');
+  activeCellIndex=cellIndex;
+  const project=projects[currentProjectId];
+  const page=project.pages[currentPageIndex];
+  const sn=currentPageIndex*6;
+  const num=sn+cellIndex+1;
+  document.getElementById('cameraScreenTitle').textContent=`視点場${toKanji(num)} 撮影`;
+  showScreen('screen-camera');
+
+  // 地図初期化
+  if(cameraMap){cameraMap.remove();cameraMap=null;}
+  setTimeout(()=>{
+    const data=page.mapDetail;
+    const center=currentLat?[currentLat,currentLng]:data?[data.centerLat,data.centerLng]:[35.6762,139.6503];
+    const zoom=data?data.zoom:17;
+    cameraMap=L.map('cameraMap').setView(center,zoom);
+    L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',{attribution:'©国土地理院',maxZoom:18}).addTo(cameraMap);
+
+    // 既存の視点場マーカーを表示
+    page.cells.forEach((cell,i)=>{
+      if(!cell.photo||!cell.lat)return;
+      const n=sn+i+1;
+      const icon=L.divIcon({className:'',html:`<div style="background:#E8671B;color:white;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;border:2px solid white">${n}</div>`,iconSize:[22,22],iconAnchor:[11,11]});
+      L.marker([cell.lat,cell.lng],{icon}).addTo(cameraMap);
+    });
+
+    // 現在地マーカー（青）
+    if(currentLat){
+      const myIcon=L.divIcon({className:'',html:`<div style="background:#1565C0;color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;border:2px solid white">現</div>`,iconSize:[20,20],iconAnchor:[10,10]});
+      cameraMarker=L.marker([currentLat,currentLng],{icon:myIcon}).addTo(cameraMap);
+    }
+
+    cameraMap.invalidateSize();
+    updateCameraHeadingDisplay();
+  },300);
+
+  // 方位のリアルタイム更新
+  cameraHeadingInterval=setInterval(updateCameraHeadingDisplay,200);
+}
+
+function updateCameraHeadingDisplay(){
+  if(currentHeading===null)return;
+  const h=currentHeading;
+  // 方位ラベル更新
+  document.getElementById('cameraHeadingLabel').textContent=`方位: ${headingToLabel(h)}`;
+  document.getElementById('cameraHeadingArrow').style.transform=`rotate(${h}deg)`;
+  document.getElementById('cameraBigArrow').style.transform=`rotate(${h}deg)`;
+  document.getElementById('cameraBigHeading').textContent=headingToLabel(h);
+
+  // 現在地から方向矢印を更新
+  if(cameraMap&&currentLat){
+    if(cameraMarker)cameraMap.removeLayer(cameraMarker);
+    const myIcon=L.divIcon({className:'',html:`<div style="background:#1565C0;color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;border:2px solid white">現</div>`,iconSize:[20,20],iconAnchor:[10,10]});
+    cameraMarker=L.marker([currentLat,currentLng],{icon:myIcon}).addTo(cameraMap);
+
+    if(cameraArrowLine)try{cameraMap.removeLayer(cameraArrowLine)}catch(e){}
+    if(cameraArrowHead)try{cameraMap.removeLayer(cameraArrowHead)}catch(e){}
+    const rad=h*Math.PI/180,len=0.0006;
+    const endLat=currentLat+len*Math.cos(rad),endLng=currentLng+len*Math.sin(rad)/Math.cos(currentLat*Math.PI/180);
+    cameraArrowLine=L.polyline([[currentLat,currentLng],[endLat,endLng]],{color:'#1565C0',weight:4}).addTo(cameraMap);
+    const arrowIcon=L.divIcon({className:'',html:`<svg width="24" height="24" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg" style="transform:rotate(${h}deg);transform-origin:center;overflow:visible"><polygon points="10,2 16,18 10,14 4,18" fill="#1565C0" stroke="white" stroke-width="1.5"/></svg>`,iconSize:[24,24],iconAnchor:[12,12]});
+    cameraArrowHead=L.marker([endLat,endLng],{icon:arrowIcon,interactive:false}).addTo(cameraMap);
+  }
+}
+
+function triggerCameraFromScreen(){
+  document.getElementById('cameraInput').click();
+}
+
+function closeCameraScreen(){
+  if(cameraHeadingInterval){clearInterval(cameraHeadingInterval);cameraHeadingInterval=null;}
+  if(cameraMap){cameraMap.remove();cameraMap=null;}
+  showScreen('screen-ledger');
+}
+
+
 function openAdjustModal(){
   closeModal('photoModal');
   const cell=projects[currentProjectId].pages[currentPageIndex].cells[activeCellIndex];
