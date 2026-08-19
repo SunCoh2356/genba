@@ -496,10 +496,10 @@ function requestCompassPermission(){
     }).catch(e=>showToast('方位許可エラー'));
   }
 }
-let headingFlipped=false;
+let headingFlipped=true; // デフォルトで反転ON
 function flipHeading(){
   headingFlipped=!headingFlipped;
-  showToast(headingFlipped?'方位を180度反転しました':'方位を元に戻しました');
+  showToast(headingFlipped?'方位を反転しました（現在：反転ON）':'方位を元に戻しました（現在：反転OFF）');
 }
 
 function startCompassListener(){
@@ -509,11 +509,11 @@ function startCompassListener(){
     // iPhoneの持ち方による補正
     const orientation=window.screen.orientation?window.screen.orientation.angle:(window.orientation||0);
     if(orientation===90){
-      // 横持ち（ホームボタン右・カメラ左）：-90度補正
-      h=(h+270)%360;
-    }else if(orientation===-90||orientation===270){
-      // 横持ち（ホームボタン左・カメラ右）：+90度補正
+      // 横持ち（ホームボタン右）：+90度補正
       h=(h+90)%360;
+    }else if(orientation===-90||orientation===270){
+      // 横持ち（ホームボタン左）：-90度補正
+      h=(h+270)%360;
     }
     // 反転フラグが有効な場合は180度補正
     if(headingFlipped)h=(h+180)%360;
