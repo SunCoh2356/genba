@@ -866,6 +866,24 @@ function handleFileInput(e){
     saveCurrentProject();renderPhotoGrid();updateDetailMiniMap();
     const kb=Math.round(compressed.length*0.75/1024);
     showToast(`写真を追加しました（${kb}KB）`+(currentLat?' 📍GPS記録済み':''));
+
+    // カメラ画面から撮影した場合、次の空きセルに移動
+    const currentScreen=document.querySelector('.screen.active');
+    if(currentScreen&&currentScreen.id==='screen-camera'){
+      // 次の空きセルを探す
+      const currentPage=projects[currentProjectId].pages[currentPageIndex];
+      const nextEmpty=currentPage.cells.findIndex((c,i)=>i>activeCellIndex&&!c.photo);
+      if(nextEmpty>=0){
+        activeCellIndex=nextEmpty;
+        const sn=currentPageIndex*6;
+        const num=sn+nextEmpty+1;
+        document.getElementById('cameraScreenTitle').textContent=`視点場${toKanji(num)} 撮影`;
+        showToast(`次は視点場${toKanji(num)}を撮影してください`);
+      }else{
+        showToast('このページの撮影が完了しました');
+        closeCameraScreen();
+      }
+    }
   };
   img.onerror=()=>{URL.revokeObjectURL(objectUrl);showToast('写真の読み込みに失敗しました');};
   img.src=objectUrl;
@@ -1126,8 +1144,12 @@ function openCameraScreen(cellIndex){
 }
 
 function triggerCameraFromScreen(){
+  // スライダーの値を一時的にcurrentHeadingに設定してから撮影
+  const savedHeading=currentHeading;
   currentHeading=currentCameraHeading;
   document.getElementById('cameraInput').click();
+  // 少し後に元の値に戻す
+  setTimeout(()=>{currentHeading=savedHeading;},2000);
 }
 
 function closeCameraScreen(){
