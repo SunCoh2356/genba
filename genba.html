@@ -506,8 +506,8 @@ function startCompassListener(){
   window.addEventListener('deviceorientation',e=>{
     let h=e.webkitCompassHeading!==undefined?e.webkitCompassHeading:e.alpha;
     if(h===null||h===undefined)return;
-    // カメラ左横持ち：-90度補正
-    h=(h+270)%360;
+    // カメラ左横持ち：+180度補正
+    h=(h+180)%360;
     // 反転フラグ
     if(headingFlipped)h=(h+180)%360;
     currentHeading=Math.round(h);
