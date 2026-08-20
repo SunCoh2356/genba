@@ -138,7 +138,8 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
 /* PDF印刷プレビュー - A4縦 両面印刷対応 */
-.preview-page{background:white;border:1px solid var(--border);margin-bottom:20px;box-shadow:var(--shadow);width:100%;max-width:794px;margin-left:auto;margin-right:auto;padding:20px;box-sizing:border-box}
+.preview-page{background:white;border:1px solid var(--border);margin-bottom:20px;box-shadow:var(--shadow);width:100%;max-width:794px;margin-left:auto;margin-right:auto;padding:15px 10px;box-sizing:border-box}
+.preview-page.a3{max-width:1122px}
 .preview-header{background:#1B2A4A;color:white;padding:4px 10px;font-size:9px;display:flex;gap:10px;align-items:center;border-radius:3px;margin-bottom:8px;flex-wrap:nowrap;overflow:hidden;white-space:nowrap}
 .preview-header span{flex-shrink:0;color:white}
 .preview-header b{font-weight:700;color:white}
@@ -156,17 +157,26 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
 .preview-photo-empty{aspect-ratio:3/2;background:var(--cell-bg);display:flex;align-items:center;justify-content:center;color:#ccc;font-size:10px}
 .preview-photo-comment{padding:3px 6px;font-size:9px;color:var(--text);line-height:1.4;min-height:22px;border-top:1px solid var(--border)}
 
+/* A3横レイアウト */
+.a3-layout{display:grid;grid-template-columns:1fr 2fr;gap:8px}
+.a3-map-col{display:flex;flex-direction:column;gap:6px}
+.a3-map-box{flex:1;border:1px solid var(--border);border-radius:4px;overflow:hidden;display:flex;flex-direction:column;min-height:200px}
+.a3-photo-col{display:grid;grid-template-columns:1fr 2fr;gap:6px}
+.a3-photo-left{display:grid;grid-template-rows:repeat(4,1fr);gap:6px}
+.a3-photo-right{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(4,1fr);gap:6px}
+
 @media print{
-  @page{size:A4 portrait;margin:20mm}
   body{visibility:hidden}
   #screen-preview{visibility:visible;position:fixed;left:0;top:0;width:100%;background:white}
   #screen-preview *{visibility:visible}
   .app-header,.action-bar{display:none!important}
   .preview-page{box-shadow:none;border:none;page-break-after:always;max-width:100%;padding:0;margin:0}
   #previewContent{padding:0}
-  .preview-header,.preview-map-label,.preview-photo-header{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .preview-header,.preview-map-label,.preview-photo-header,.a3-map-box .preview-map-label{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   img{-webkit-print-color-adjust:exact;print-color-adjust:exact;max-width:100%}
 }
+@media print and (max-width:1000px){@page{size:A4 portrait;margin:15mm 10mm}}
+@media print and (min-width:1001px){@page{size:A3 landscape;margin:15mm 10mm}}
 #cameraInput,#libraryInput{display:none}
 .page-tabs::-webkit-scrollbar{display:none}
 </style>
@@ -272,6 +282,7 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
               <div style="display:flex;gap:4px;flex-wrap:wrap">
                 <button class="map-cell-btn green" onclick="openDetailEditModal()">📍 位置・方向</button>
                 <button class="map-cell-btn" onclick="openMapModal('detail')">地図編集</button>
+                <button class="map-cell-btn" style="background:#666" onclick="resetDetailMap()">🔄 再設定</button>
               </div>
             </div>
             <div class="map-canvas-wrap" id="detailWrap">
@@ -378,8 +389,12 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
 <div class="screen" id="screen-preview">
   <div class="app-header">
     <button class="back-btn" onclick="showScreen('screen-ledger')">← 戻る</button>
-    <h1>印刷プレビュー（A4縦）</h1>
-    <button class="btn btn-primary btn-sm" onclick="printWithGuide()">🖨️ 印刷</button>
+    <h1 id="previewTitle">印刷プレビュー（A4縦）</h1>
+    <div style="display:flex;gap:6px">
+      <button class="btn btn-secondary btn-sm" id="btnA4" onclick="switchPrintSize('A4')" style="font-weight:700">A4</button>
+      <button class="btn btn-secondary btn-sm" id="btnA3" onclick="switchPrintSize('A3')">A3</button>
+      <button class="btn btn-primary btn-sm" onclick="printWithGuide()">🖨️ 印刷</button>
+    </div>
   </div>
   <div style="padding:16px;padding-bottom:100px;background:var(--bg)" id="previewContent"></div>
 </div>
@@ -692,6 +707,36 @@ async function openProject(id){
 }
 
 // GPS位置から地図を自動設定
+function resetDetailMap(){
+  const project=projects[currentProjectId];
+  const page=project.pages[currentPageIndex];
+  // 写真の座標から視点場図を強制再設定
+  const photoCells=page.cells.filter(c=>c.photo&&c.lat);
+  if(photoCells.length>0){
+    const avgLat=photoCells.reduce((s,c)=>s+c.lat,0)/photoCells.length;
+    const avgLng=photoCells.reduce((s,c)=>s+c.lng,0)/photoCells.length;
+    page.mapDetail={centerLat:avgLat,centerLng:avgLng,zoom:17};
+    const scale=project.mapData.overviewScale||4;
+    project.mapData.overview={centerLat:avgLat,centerLng:avgLng,zoom:Math.max(10,17-scale)};
+    saveCurrentProject();
+    if(detailMiniMap){detailMiniMap.remove();detailMiniMap=null;}
+    if(overviewMiniMap){overviewMiniMap.remove();overviewMiniMap=null;}
+    renderMiniMaps();
+    showToast('地図を写真座標から再設定しました');
+  }else if(currentLat){
+    page.mapDetail={centerLat:currentLat,centerLng:currentLng,zoom:17};
+    const scale=project.mapData.overviewScale||4;
+    project.mapData.overview={centerLat:currentLat,centerLng:currentLng,zoom:Math.max(10,17-scale)};
+    saveCurrentProject();
+    if(detailMiniMap){detailMiniMap.remove();detailMiniMap=null;}
+    if(overviewMiniMap){overviewMiniMap.remove();overviewMiniMap=null;}
+    renderMiniMaps();
+    showToast('地図をGPS位置から再設定しました');
+  }else{
+    showToast('写真のGPS座標がありません。「地図編集」から手動設定してください。');
+  }
+}
+
 function autoSetMapFromGPS(){
   const project=projects[currentProjectId];
   if(!project)return;
@@ -1482,8 +1527,19 @@ function exportCsvOnly(){
   setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 
+let currentPrintSize='A4';
+
+function switchPrintSize(size){
+  currentPrintSize=size;
+  document.getElementById('previewTitle').textContent=`印刷プレビュー（${size}${size==='A4'?'縦':'横'}）`;
+  document.getElementById('btnA4').style.fontWeight=size==='A4'?'700':'400';
+  document.getElementById('btnA3').style.fontWeight=size==='A3'?'700':'400';
+  openPrintPreview();
+}
+
 function printWithGuide(){
-  alert('印刷ダイアログが開いたら以下を設定してください：\n\n・「詳細設定」または「その他の設定」を開く\n・「ヘッダーとフッター」のチェックを外す\n・「背景のグラフィック」にチェックを入れる\n・用紙サイズ：A4\n・向き：縦\n\nOKをクリックすると印刷ダイアログが開きます');
+  const sizeMsg=currentPrintSize==='A3'?'・用紙サイズ：A3\n・向き：横（ランドスケープ）':'・用紙サイズ：A4\n・向き：縦';
+  alert(`印刷ダイアログが開いたら以下を設定してください：\n\n${sizeMsg}\n・「ヘッダーとフッター」のチェックを外す\n・「背景のグラフィック」にチェックを入れる\n\nOKをクリックすると印刷ダイアログが開きます`);
   window.print();
 }
 
@@ -1493,57 +1549,14 @@ function openPrintPreview(){
   const content=document.getElementById('previewContent');
   content.innerHTML='';
 
-  project.pages.forEach((page,pi)=>{
-    const sn=pi*6;
-    const pageDiv=document.createElement('div');
-    pageDiv.className='preview-page';
-
-    // ヘッダー
-    const headerHtml=`<div class="preview-header">
-      <span><b>現場名:</b> ${escHtml(project.siteName||'')}</span>
-      <span><b>調査日:</b> ${project.date||''}</span>
-      <span><b>調査者:</b> ${escHtml(project.inspector||'')}</span>
-      <span><b>天気:</b> ${escHtml(project.weather||'')}</span>
-      <span><b>備考:</b> ${escHtml(project.note||'')}</span>
-      <span style="margin-left:auto"><b>ページ:</b> ${pi+1}/${project.pages.length}</span>
-    </div>`;
-
-    // 地図エリア（俯瞰図＋視点場図を横並び）
-    const mapsHtml=`<div class="preview-maps">
-      <div class="preview-map-box">
-        <div class="preview-map-label">俯瞰図</div>
-        <div class="preview-map-content" id="previewOverview_${pi}">地図を取得してください</div>
-        <div class="preview-attribution">©国土地理院</div>
-      </div>
-      <div class="preview-map-box">
-        <div class="preview-map-label">写真視点場（ページ${pi+1}）</div>
-        <div class="preview-map-content" id="previewDetail_${pi}">地図を取得してください</div>
-        <div class="preview-attribution">©国土地理院</div>
-      </div>
-    </div>`;
-
-    // 写真グリッド（3行×2列）
-    let photosHtml='<div class="preview-photos">';
-    for(let i=0;i<6;i++){
-      const cell=page.cells[i]||{photo:null,comment:''};
-      const num=sn+i+1;
-      photosHtml+=`<div class="preview-photo-box">
-        <div class="preview-photo-header">視点場${toKanji(num)}</div>
-        ${cell.photo
-          ?`<div class="preview-photo-img"><img src="${cell.photo}" alt="視点場${toKanji(num)}"></div>`
-          :`<div class="preview-photo-empty">写真なし</div>`}
-        <div class="preview-photo-comment">${escHtml(cell.comment)}</div>
-      </div>`;
-    }
-    photosHtml+='</div>';
-
-    pageDiv.innerHTML=headerHtml+mapsHtml+photosHtml;
-    content.appendChild(pageDiv);
-  });
+  if(currentPrintSize==='A3'){
+    openPrintPreviewA3(project,content);
+  }else{
+    openPrintPreviewA4(project,content);
+  }
 
   // 地図画像をキャプチャして埋め込む
   setTimeout(()=>{
-    // 俯瞰図（赤枠付き）
     if(overviewMiniMap){
       try{
         leafletImage(overviewMiniMap,(err,canvas)=>{
@@ -1555,7 +1568,6 @@ function openPrintPreview(){
         });
       }catch(e){console.error('俯瞰図キャプチャエラー:',e)}
     }
-    // 視点場図（マーカー・矢印付き）
     if(detailMiniMap){
       try{
         leafletImage(detailMiniMap,(err,canvas)=>{
@@ -1571,6 +1583,111 @@ function openPrintPreview(){
   showScreen('screen-preview');
 }
 
+// A4縦レイアウト（6枚/ページ）
+function openPrintPreviewA4(project,content){
+  project.pages.forEach((page,pi)=>{
+    const sn=pi*6;
+    const pageDiv=document.createElement('div');
+    pageDiv.className='preview-page';
+    const headerHtml=buildHeaderHtml(project,pi);
+    const mapsHtml=`<div class="preview-maps">
+      <div class="preview-map-box">
+        <div class="preview-map-label">俯瞰図</div>
+        <div class="preview-map-content" id="previewOverview_${pi}">地図を取得してください</div>
+        <div class="preview-attribution">©国土地理院</div>
+      </div>
+      <div class="preview-map-box">
+        <div class="preview-map-label">写真視点場（ページ${pi+1}）</div>
+        <div class="preview-map-content" id="previewDetail_${pi}">地図を取得してください</div>
+        <div class="preview-attribution">©国土地理院</div>
+      </div>
+    </div>`;
+    let photosHtml='<div class="preview-photos">';
+    for(let i=0;i<6;i++){
+      const cell=page.cells[i]||{photo:null,comment:''};
+      const num=sn+i+1;
+      photosHtml+=buildPhotoBoxHtml(cell,num);
+    }
+    photosHtml+='</div>';
+    pageDiv.innerHTML=headerHtml+mapsHtml+photosHtml;
+    content.appendChild(pageDiv);
+  });
+}
+
+// A3横レイアウト（12枚/ページ）
+function openPrintPreviewA3(project,content){
+  // 12枚ずつページ分割
+  const allCells=[];
+  project.pages.forEach(page=>{
+    page.cells.forEach(cell=>allCells.push(cell));
+  });
+  const pageCount=Math.ceil(allCells.length/12);
+  for(let pi=0;pi<pageCount;pi++){
+    const cells=allCells.slice(pi*12,(pi+1)*12);
+    const sn=pi*12;
+    const pageDiv=document.createElement('div');
+    pageDiv.className='preview-page a3';
+    const headerHtml=buildHeaderHtml(project,pi,pageCount);
+
+    // A3レイアウト：左1/3に地図2段、右2/3に写真（左1列×4行＋右2列×4行）
+    let leftPhotosHtml='';
+    let rightPhotosHtml='';
+    for(let i=0;i<4;i++){
+      const cell=cells[i]||{photo:null,comment:''};
+      leftPhotosHtml+=buildPhotoBoxHtml(cell,sn+i+1);
+    }
+    for(let i=4;i<12;i++){
+      const cell=cells[i]||{photo:null,comment:''};
+      rightPhotosHtml+=buildPhotoBoxHtml(cell,sn+i+1);
+    }
+
+    const bodyHtml=`<div class="a3-layout">
+      <!-- 左1/3：地図 -->
+      <div class="a3-map-col">
+        <div class="a3-map-box">
+          <div class="preview-map-label">俯瞰図</div>
+          <div class="preview-map-content" id="previewOverview_${pi}" style="flex:1">地図を取得してください</div>
+          <div class="preview-attribution">©国土地理院</div>
+        </div>
+        <div class="a3-map-box">
+          <div class="preview-map-label">写真視点場（P${pi+1}）</div>
+          <div class="preview-map-content" id="previewDetail_${pi}" style="flex:1">地図を取得してください</div>
+          <div class="preview-attribution">©国土地理院</div>
+        </div>
+      </div>
+      <!-- 右2/3：写真 -->
+      <div class="a3-photo-col">
+        <div class="a3-photo-left">${leftPhotosHtml}</div>
+        <div class="a3-photo-right">${rightPhotosHtml}</div>
+      </div>
+    </div>`;
+
+    pageDiv.innerHTML=headerHtml+bodyHtml;
+    content.appendChild(pageDiv);
+  }
+}
+
+function buildHeaderHtml(project,pi,totalPages){
+  const total=totalPages||project.pages.length;
+  return`<div class="preview-header">
+    <span><b>現場名:</b> ${escHtml(project.siteName||'')}</span>
+    <span><b>調査日:</b> ${project.date||''}</span>
+    <span><b>調査者:</b> ${escHtml(project.inspector||'')}</span>
+    <span><b>天気:</b> ${escHtml(project.weather||'')}</span>
+    <span><b>備考:</b> ${escHtml(project.note||'')}</span>
+    <span style="margin-left:auto"><b>ページ:</b> ${pi+1}/${total}</span>
+  </div>`;
+}
+
+function buildPhotoBoxHtml(cell,num){
+  return`<div class="preview-photo-box">
+    <div class="preview-photo-header">視点場${toKanji(num)}</div>
+    ${cell.photo
+      ?`<div class="preview-photo-img"><img src="${cell.photo}" alt="視点場${toKanji(num)}"></div>`
+      :`<div class="preview-photo-empty">写真なし</div>`}
+    <div class="preview-photo-comment">${escHtml(cell.comment||'')}</div>
+  </div>`;
+}
 function deleteCurrentProject(){document.getElementById('deleteTargetName').textContent=projects[currentProjectId].siteName||'（現場名未入力）';openModal('deleteModal')}
 async function confirmDelete(){await deleteProjectDB(currentProjectId);delete projects[currentProjectId];closeModal('deleteModal');goBack();showToast('現場を削除しました')}
 
