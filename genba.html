@@ -1555,28 +1555,60 @@ function openPrintPreview(){
     openPrintPreviewA4(project,content);
   }
 
-  // 地図画像をキャプチャして埋め込む
+  // 地図をプレビューにLeafletで直接描画
   setTimeout(()=>{
-    if(overviewMiniMap){
-      try{
-        leafletImage(overviewMiniMap,(err,canvas)=>{
-          if(err)return;
-          const dataUrl=canvas.toDataURL('image/png');
-          document.querySelectorAll('[id^="previewOverview_"]').forEach(el=>{
-            el.innerHTML=`<img src="${dataUrl}" style="width:100%;height:100%;object-fit:cover">`;
-          });
+    const project=projects[currentProjectId];
+    // 俯瞰図
+    document.querySelectorAll('[id^="previewOverview_"]').forEach((el,pi)=>{
+      const data=project.mapData.overview;
+      if(!data){el.textContent='地図未設定';return;}
+      el.style.position='relative';
+      const mapDiv=document.createElement('div');
+      mapDiv.style.cssText='width:100%;height:100%';
+      el.innerHTML='';el.appendChild(mapDiv);
+      const map=L.map(mapDiv,{zoomControl:false,dragging:false,scrollWheelZoom:false,doubleClickZoom:false,touchZoom:false,attributionControl:false}).setView([data.centerLat,data.centerLng],data.zoom);
+      L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',{maxZoom:18}).addTo(map);
+      // 視点場範囲の赤枠
+      const pageIdx=pi;
+      const pageData=pageIdx<project.pages.length?project.pages[pageIdx].mapDetail:null;
+      if(pageData){
+        const bounds=getBoundsForZoom(pageData.centerLat,pageData.centerLng,pageData.zoom);
+        L.rectangle(bounds,{color:'red',weight:2,fill:false,dashArray:'4'}).addTo(map);
+      }
+      setTimeout(()=>map.invalidateSize(),100);
+    });
+    // 視点場図
+    const detailEl=document.getElementById(`previewDetail_${currentPageIndex}`);
+    if(detailEl){
+      const page=project.pages[currentPageIndex];
+      const data=page?page.mapDetail:null;
+      if(data){
+        detailEl.style.position='relative';
+        const mapDiv=document.createElement('div');
+        mapDiv.style.cssText='width:100%;height:100%';
+        detailEl.innerHTML='';detailEl.appendChild(mapDiv);
+        const map=L.map(mapDiv,{zoomControl:false,dragging:false,scrollWheelZoom:false,doubleClickZoom:false,touchZoom:false,attributionControl:false}).setView([data.centerLat,data.centerLng],data.zoom);
+        L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',{maxZoom:18}).addTo(map);
+        // 撮影位置マーカーと矢印
+        const sn=currentPageIndex*6;
+        page.cells.forEach((cell,i)=>{
+          if(!cell.photo||!cell.lat)return;
+          const num=sn+i+1;
+          const icon=L.divIcon({className:'',html:`<div style="background:#E8671B;color:white;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;border:2px solid white">${num}</div>`,iconSize:[18,18],iconAnchor:[9,9]});
+          L.marker([cell.lat,cell.lng],{icon}).addTo(map);
+          const h=cell.heading;
+          if(h!=null&&!isNaN(Number(h))){
+            const heading=Number(h),rad=heading*Math.PI/180,len=0.0004;
+            const endLat=cell.lat+len*Math.cos(rad),endLng=cell.lng+len*Math.sin(rad)/Math.cos(cell.lat*Math.PI/180);
+            L.polyline([[cell.lat,cell.lng],[endLat,endLng]],{color:'#E8671B',weight:2}).addTo(map);
+            const arrowIcon=L.divIcon({className:'',html:`<svg width="16" height="16" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg" style="transform:rotate(${heading}deg);transform-origin:center;overflow:visible"><polygon points="10,2 16,18 10,14 4,18" fill="#E8671B" stroke="white" stroke-width="1.5"/></svg>`,iconSize:[16,16],iconAnchor:[8,8]});
+            L.marker([endLat,endLng],{icon:arrowIcon,interactive:false}).addTo(map);
+          }
         });
-      }catch(e){console.error('俯瞰図キャプチャエラー:',e)}
-    }
-    if(detailMiniMap){
-      try{
-        leafletImage(detailMiniMap,(err,canvas)=>{
-          if(err)return;
-          const dataUrl=canvas.toDataURL('image/png');
-          const el=document.getElementById(`previewDetail_${currentPageIndex}`);
-          if(el)el.innerHTML=`<img src="${dataUrl}" style="width:100%;height:100%;object-fit:cover">`;
-        });
-      }catch(e){console.error('視点場図キャプチャエラー:',e)}
+        setTimeout(()=>map.invalidateSize(),100);
+      }else{
+        detailEl.textContent='地図未設定';
+      }
     }
   },500);
 
