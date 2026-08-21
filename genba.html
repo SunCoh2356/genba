@@ -140,7 +140,7 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
 
 /* PDF印刷プレビュー - A4縦 両面印刷対応 */
 .preview-page{background:white;border:1px solid var(--border);margin-bottom:20px;box-shadow:var(--shadow);width:100%;max-width:794px;margin-left:auto;margin-right:auto;padding:15px 10px;box-sizing:border-box}
-.preview-page.a3{max-width:1122px}
+.preview-page.a3{max-width:1122px;width:100%}
 .preview-header{background:#1B2A4A;color:white;padding:4px 10px;font-size:9px;display:flex;gap:10px;align-items:center;border-radius:3px;margin-bottom:8px;flex-wrap:nowrap;overflow:hidden;white-space:nowrap}
 .preview-header span{flex-shrink:0;color:white}
 .preview-header b{font-weight:700;color:white}
@@ -167,6 +167,7 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
 .a3-photo-right{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(4,1fr);gap:6px}
 
 @media print{
+  @page{size:A4 portrait;margin:15mm 10mm}
   body{visibility:hidden}
   #screen-preview{visibility:visible;position:fixed;left:0;top:0;width:100%;background:white}
   #screen-preview *{visibility:visible}
@@ -176,10 +177,7 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
   .preview-header,.preview-map-label,.preview-photo-header{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   img{-webkit-print-color-adjust:exact;print-color-adjust:exact;max-width:100%}
 }
-/* A4縦 */
-body.print-a4 @media print{@page{size:A4 portrait;margin:15mm 10mm}}
-/* A3横 */
-body.print-a3 @media print{@page{size:A3 landscape;margin:15mm 10mm}}
+/* A3横向き専用 - 別スタイルシートで切替 */
 #cameraInput,#libraryInput{display:none}
 .page-tabs::-webkit-scrollbar{display:none}
 </style>
@@ -1541,22 +1539,26 @@ function switchPrintSize(size){
 }
 
 function printWithGuide(){
-  // A4/A3に応じてbodyクラスを設定
-  document.body.classList.remove('print-a4','print-a3');
-  document.body.classList.add(currentPrintSize==='A3'?'print-a3':'print-a4');
+  // 既存の印刷用スタイルを削除
+  const old=document.getElementById('printPageStyle');
+  if(old)old.remove();
 
-  const sizeMsg=currentPrintSize==='A3'
-    ?'用紙サイズ：A3 / 向き：横'
-    :'用紙サイズ：A4 / 向き：縦';
+  // A4縦 or A3横のスタイルを動的に追加
+  const style=document.createElement('style');
+  style.id='printPageStyle';
+  if(currentPrintSize==='A3'){
+    style.textContent='@media print{@page{size:A3 landscape;margin:15mm}#previewContent{width:420mm;transform-origin:top left}}';
+  }else{
+    style.textContent='@media print{@page{size:A4 portrait;margin:15mm 10mm}}';
+  }
+  document.head.appendChild(style);
 
-  // ヘッダー・フッター非表示の案内
   if(!sessionStorage.getItem('printGuideShown')){
     sessionStorage.setItem('printGuideShown','1');
+    const sizeMsg=currentPrintSize==='A3'?'A3・横向き':'A4・縦向き';
     alert(`印刷設定：${sizeMsg}\n\n印刷ダイアログで以下を設定してください：\n・「ヘッダーとフッター」のチェックを外す\n・「背景のグラフィック」にチェックを入れる\n\n※次回からこのメッセージは表示されません`);
   }
   window.print();
-  // 印刷後にクラスをリセット
-  setTimeout(()=>document.body.classList.remove('print-a4','print-a3'),2000);
 }
 
 // 地図を静止画像として生成してプレビューに埋め込む（OSMタイル使用でCORS回避）
