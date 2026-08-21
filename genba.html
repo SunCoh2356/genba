@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://unpkg.com/leaflet-image@0.4.0/leaflet-image.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script>
 if('serviceWorker' in navigator){
   window.addEventListener('load',()=>{
@@ -172,11 +173,13 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
   .app-header,.action-bar{display:none!important}
   .preview-page{box-shadow:none;border:none;page-break-after:always;max-width:100%;padding:0;margin:0}
   #previewContent{padding:0}
-  .preview-header,.preview-map-label,.preview-photo-header,.a3-map-box .preview-map-label{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .preview-header,.preview-map-label,.preview-photo-header{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   img{-webkit-print-color-adjust:exact;print-color-adjust:exact;max-width:100%}
 }
-@media print and (max-width:1000px){@page{size:A4 portrait;margin:15mm 10mm}}
-@media print and (min-width:1001px){@page{size:A3 landscape;margin:15mm 10mm}}
+/* A4縦 */
+body.print-a4 @media print{@page{size:A4 portrait;margin:15mm 10mm}}
+/* A3横 */
+body.print-a3 @media print{@page{size:A3 landscape;margin:15mm 10mm}}
 #cameraInput,#libraryInput{display:none}
 .page-tabs::-webkit-scrollbar{display:none}
 </style>
@@ -1538,9 +1541,72 @@ function switchPrintSize(size){
 }
 
 function printWithGuide(){
-  const sizeMsg=currentPrintSize==='A3'?'・用紙サイズ：A3\n・向き：横（ランドスケープ）':'・用紙サイズ：A4\n・向き：縦';
-  alert(`印刷ダイアログが開いたら以下を設定してください：\n\n${sizeMsg}\n・「ヘッダーとフッター」のチェックを外す\n・「背景のグラフィック」にチェックを入れる\n\nOKをクリックすると印刷ダイアログが開きます`);
+  // A4/A3に応じてbodyクラスを設定
+  document.body.classList.remove('print-a4','print-a3');
+  document.body.classList.add(currentPrintSize==='A3'?'print-a3':'print-a4');
+
+  const sizeMsg=currentPrintSize==='A3'
+    ?'用紙サイズ：A3 / 向き：横'
+    :'用紙サイズ：A4 / 向き：縦';
+
+  // ヘッダー・フッター非表示の案内
+  if(!sessionStorage.getItem('printGuideShown')){
+    sessionStorage.setItem('printGuideShown','1');
+    alert(`印刷設定：${sizeMsg}\n\n印刷ダイアログで以下を設定してください：\n・「ヘッダーとフッター」のチェックを外す\n・「背景のグラフィック」にチェックを入れる\n\n※次回からこのメッセージは表示されません`);
+  }
   window.print();
+  // 印刷後にクラスをリセット
+  setTimeout(()=>document.body.classList.remove('print-a4','print-a3'),2000);
+}
+
+// 地図を静止画像として生成してプレビューに埋め込む（OSMタイル使用でCORS回避）
+async function renderMapToImage(centerLat,centerLng,zoom,markers,redBox){
+  return new Promise(resolve=>{
+    const container=document.createElement('div');
+    container.style.cssText='position:fixed;left:-9999px;top:0;width:400px;height:300px;z-index:-1;visibility:hidden';
+    document.body.appendChild(container);
+    const map=L.map(container,{zoomControl:false,attributionControl:false}).setView([centerLat,centerLng],zoom);
+    // OSMタイル（crossOrigin対応）
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
+      maxZoom:19,
+      crossOrigin:true
+    }).addTo(map);
+    // 赤枠
+    if(redBox){
+      const bounds=getBoundsForZoom(redBox.lat,redBox.lng,redBox.zoom);
+      L.rectangle(bounds,{color:'red',weight:2,fill:false,dashArray:'4'}).addTo(map);
+    }
+    // マーカーと矢印
+    if(markers){
+      markers.forEach(m=>{
+        const icon=L.divIcon({className:'',html:`<div style="background:#E8671B;color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4)">${m.num}</div>`,iconSize:[20,20],iconAnchor:[10,10]});
+        L.marker([m.lat,m.lng],{icon}).addTo(map);
+        if(m.heading!=null&&!isNaN(Number(m.heading))){
+          const h=Number(m.heading),rad=h*Math.PI/180,len=0.0004;
+          const endLat=m.lat+len*Math.cos(rad),endLng=m.lng+len*Math.sin(rad)/Math.cos(m.lat*Math.PI/180);
+          L.polyline([[m.lat,m.lng],[endLat,endLng]],{color:'#E8671B',weight:2}).addTo(map);
+          const arrowIcon=L.divIcon({className:'',html:`<svg width="16" height="16" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg" style="transform:rotate(${h}deg);transform-origin:center;overflow:visible"><polygon points="10,2 16,18 10,14 4,18" fill="#E8671B" stroke="white" stroke-width="1.5"/></svg>`,iconSize:[16,16],iconAnchor:[8,8]});
+          L.marker([endLat,endLng],{icon:arrowIcon,interactive:false}).addTo(map);
+        }
+      });
+    }
+    // タイル読み込み完了を待ってキャプチャ
+    let attempts=0;
+    const tryCapture=()=>{
+      attempts++;
+      leafletImage(map,(err,canvas)=>{
+        if(err&&attempts<5){
+          setTimeout(tryCapture,800);
+          return;
+        }
+        document.body.removeChild(container);
+        map.remove();
+        if(err||!canvas){resolve(null);return;}
+        resolve(canvas.toDataURL('image/png'));
+      });
+    };
+    setTimeout(tryCapture,1500);
+  });
 }
 
 function openPrintPreview(){
@@ -1555,67 +1621,49 @@ function openPrintPreview(){
     openPrintPreviewA4(project,content);
   }
 
-  // 地図をプレビューにLeafletで直接描画
-  setTimeout(()=>{
-    const project=projects[currentProjectId];
-    // 俯瞰図
-    document.querySelectorAll('[id^="previewOverview_"]').forEach((el,pi)=>{
-      const data=project.mapData.overview;
-      if(!data){el.textContent='地図未設定';return;}
-      el.style.position='relative';
-      const mapDiv=document.createElement('div');
-      mapDiv.style.cssText='width:100%;height:100%';
-      el.innerHTML='';el.appendChild(mapDiv);
-      const map=L.map(mapDiv,{zoomControl:false,dragging:false,scrollWheelZoom:false,doubleClickZoom:false,touchZoom:false,attributionControl:false}).setView([data.centerLat,data.centerLng],data.zoom);
-      L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',{maxZoom:18}).addTo(map);
-      // 視点場範囲の赤枠
-      const pageIdx=pi;
-      const pageData=pageIdx<project.pages.length?project.pages[pageIdx].mapDetail:null;
-      if(pageData){
-        const bounds=getBoundsForZoom(pageData.centerLat,pageData.centerLng,pageData.zoom);
-        L.rectangle(bounds,{color:'red',weight:2,fill:false,dashArray:'4'}).addTo(map);
+  showScreen('screen-preview');
+  showToast('地図を生成中...');
+
+  // 地図を静止画像として生成して埋め込む
+  const overviewData=project.mapData.overview;
+
+  setTimeout(async()=>{
+    // 各ページの俯瞰図・視点場図を生成
+    for(let pi=0;pi<project.pages.length;pi++){
+      const page=project.pages[pi];
+      const pageDetail=page.mapDetail;
+
+      // 俯瞰図（赤枠付き）
+      const overviewEl=document.getElementById(`previewOverview_${pi}`);
+      if(overviewEl&&overviewData){
+        const redBox=pageDetail?{lat:pageDetail.centerLat,lng:pageDetail.centerLng,zoom:pageDetail.zoom}:null;
+        const dataUrl=await renderMapToImage(overviewData.centerLat,overviewData.centerLng,overviewData.zoom,null,redBox);
+        if(dataUrl){
+          overviewEl.innerHTML=`<img src="${dataUrl}" style="width:100%;height:100%;object-fit:cover;display:block">`;
+        }else{
+          overviewEl.textContent='地図取得失敗';
+        }
       }
-      setTimeout(()=>map.invalidateSize(),100);
-    });
-    // 視点場図
-    const detailEl=document.getElementById(`previewDetail_${currentPageIndex}`);
-    if(detailEl){
-      const page=project.pages[currentPageIndex];
-      const data=page?page.mapDetail:null;
-      if(data){
-        detailEl.style.position='relative';
-        const mapDiv=document.createElement('div');
-        mapDiv.style.cssText='width:100%;height:100%';
-        detailEl.innerHTML='';detailEl.appendChild(mapDiv);
-        const map=L.map(mapDiv,{zoomControl:false,dragging:false,scrollWheelZoom:false,doubleClickZoom:false,touchZoom:false,attributionControl:false}).setView([data.centerLat,data.centerLng],data.zoom);
-        L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',{maxZoom:18}).addTo(map);
-        // 撮影位置マーカーと矢印
-        const sn=currentPageIndex*6;
-        page.cells.forEach((cell,i)=>{
-          if(!cell.photo||!cell.lat)return;
-          const num=sn+i+1;
-          const icon=L.divIcon({className:'',html:`<div style="background:#E8671B;color:white;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;border:2px solid white">${num}</div>`,iconSize:[18,18],iconAnchor:[9,9]});
-          L.marker([cell.lat,cell.lng],{icon}).addTo(map);
-          const h=cell.heading;
-          if(h!=null&&!isNaN(Number(h))){
-            const heading=Number(h),rad=heading*Math.PI/180,len=0.0004;
-            const endLat=cell.lat+len*Math.cos(rad),endLng=cell.lng+len*Math.sin(rad)/Math.cos(cell.lat*Math.PI/180);
-            L.polyline([[cell.lat,cell.lng],[endLat,endLng]],{color:'#E8671B',weight:2}).addTo(map);
-            const arrowIcon=L.divIcon({className:'',html:`<svg width="16" height="16" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg" style="transform:rotate(${heading}deg);transform-origin:center;overflow:visible"><polygon points="10,2 16,18 10,14 4,18" fill="#E8671B" stroke="white" stroke-width="1.5"/></svg>`,iconSize:[16,16],iconAnchor:[8,8]});
-            L.marker([endLat,endLng],{icon:arrowIcon,interactive:false}).addTo(map);
-          }
-        });
-        setTimeout(()=>map.invalidateSize(),100);
-      }else{
-        detailEl.textContent='地図未設定';
+
+      // 視点場図（マーカー・矢印付き）
+      const detailEl=document.getElementById(`previewDetail_${pi}`);
+      if(detailEl&&pageDetail){
+        const sn=currentPrintSize==='A3'?pi*12:pi*6;
+        const markers=page.cells
+          .map((cell,i)=>cell.photo&&cell.lat?{num:sn+i+1,lat:cell.lat,lng:cell.lng,heading:cell.heading}:null)
+          .filter(Boolean);
+        const dataUrl=await renderMapToImage(pageDetail.centerLat,pageDetail.centerLng,pageDetail.zoom,markers,null);
+        if(dataUrl){
+          detailEl.innerHTML=`<img src="${dataUrl}" style="width:100%;height:100%;object-fit:cover;display:block">`;
+        }else{
+          detailEl.textContent='地図取得失敗';
+        }
       }
     }
-  },500);
-
-  showScreen('screen-preview');
+    showToast('地図の生成が完了しました');
+  },100);
 }
 
-// A4縦レイアウト（6枚/ページ）
 function openPrintPreviewA4(project,content){
   project.pages.forEach((page,pi)=>{
     const sn=pi*6;
@@ -1648,46 +1696,53 @@ function openPrintPreviewA4(project,content){
 
 // A3横レイアウト（12枚/ページ）
 function openPrintPreviewA3(project,content){
-  // 12枚ずつページ分割
+  // 全写真を通し番号で収集
   const allCells=[];
-  project.pages.forEach(page=>{
-    page.cells.forEach(cell=>allCells.push(cell));
+  project.pages.forEach((page,pi)=>{
+    page.cells.forEach((cell,ci)=>{
+      allCells.push({cell,pageIndex:pi,cellIndex:ci});
+    });
   });
+
   const pageCount=Math.ceil(allCells.length/12);
   for(let pi=0;pi<pageCount;pi++){
-    const cells=allCells.slice(pi*12,(pi+1)*12);
+    const pageCells=allCells.slice(pi*12,(pi+1)*12);
     const sn=pi*12;
     const pageDiv=document.createElement('div');
     pageDiv.className='preview-page a3';
     const headerHtml=buildHeaderHtml(project,pi,pageCount);
 
-    // A3レイアウト：左1/3に地図2段、右2/3に写真（左1列×4行＋右2列×4行）
+    // 左4枚・右8枚
     let leftPhotosHtml='';
     let rightPhotosHtml='';
     for(let i=0;i<4;i++){
-      const cell=cells[i]||{photo:null,comment:''};
-      leftPhotosHtml+=buildPhotoBoxHtml(cell,sn+i+1);
+      const item=pageCells[i];
+      leftPhotosHtml+=item?buildPhotoBoxHtml(item.cell,sn+i+1):buildPhotoBoxHtml({photo:null,comment:''},sn+i+1);
     }
     for(let i=4;i<12;i++){
-      const cell=cells[i]||{photo:null,comment:''};
-      rightPhotosHtml+=buildPhotoBoxHtml(cell,sn+i+1);
+      const item=pageCells[i];
+      rightPhotosHtml+=item?buildPhotoBoxHtml(item.cell,sn+i+1):buildPhotoBoxHtml({photo:null,comment:''},sn+i+1);
     }
 
+    // このA3ページに対応する視点場図を決定（最初の写真のページを使用）
+    const firstItem=pageCells.find(item=>item&&item.cell.photo);
+    const detailPageIndex=firstItem?firstItem.pageIndex:0;
+    const detailPage=project.pages[detailPageIndex];
+    const detailData=detailPage?detailPage.mapDetail:null;
+
     const bodyHtml=`<div class="a3-layout">
-      <!-- 左1/3：地図 -->
       <div class="a3-map-col">
         <div class="a3-map-box">
           <div class="preview-map-label">俯瞰図</div>
-          <div class="preview-map-content" id="previewOverview_${pi}" style="flex:1">地図を取得してください</div>
+          <div class="preview-map-content" id="previewOverview_${pi}" style="flex:1">地図生成中...</div>
           <div class="preview-attribution">©国土地理院</div>
         </div>
         <div class="a3-map-box">
-          <div class="preview-map-label">写真視点場（P${pi+1}）</div>
-          <div class="preview-map-content" id="previewDetail_${pi}" style="flex:1">地図を取得してください</div>
+          <div class="preview-map-label">写真視点場</div>
+          <div class="preview-map-content" id="previewDetail_${pi}" style="flex:1">地図生成中...</div>
           <div class="preview-attribution">©国土地理院</div>
         </div>
       </div>
-      <!-- 右2/3：写真 -->
       <div class="a3-photo-col">
         <div class="a3-photo-left">${leftPhotosHtml}</div>
         <div class="a3-photo-right">${rightPhotosHtml}</div>
