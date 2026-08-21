@@ -1602,64 +1602,134 @@ async function renderMapToImage(centerLat,centerLng,zoom,markers,redBox){
   });
 }
 
+// 緯度・経度・ズームからタイル座標を計算
+function latlngToTile(lat,lng,zoom){
+  const x=Math.floor((lng+180)/360*Math.pow(2,zoom));
+  const y=Math.floor((1-Math.log(Math.tan(lat*Math.PI/180)+1/Math.cos(lat*Math.PI/180))/Math.PI)/2*Math.pow(2,zoom));
+  return{x,y,z:zoom};
+}
+
+// 静的地図HTMLを生成（タイルをimg要素で並べる）
+function buildStaticMapHtml(centerLat,centerLng,zoom,width,height,markers,redBox){
+  const tileSize=256;
+  const tilesX=Math.ceil(width/tileSize)+2;
+  const tilesY=Math.ceil(height/tileSize)+2;
+  const centerTile=latlngToTile(centerLat,centerLng,zoom);
+  const scale=Math.pow(2,zoom);
+
+  // 中心タイル内でのピクセルオフセット
+  const worldX=(centerLng+180)/360*scale;
+  const worldY=(1-Math.log(Math.tan(centerLat*Math.PI/180)+1/Math.cos(centerLat*Math.PI/180))/Math.PI)/2*scale;
+  const offsetX=(worldX-centerTile.x)*tileSize;
+  const offsetY=(worldY-centerTile.y)*tileSize;
+
+  // タイル画像を並べる
+  let tilesHtml='';
+  const startX=centerTile.x-Math.floor(tilesX/2);
+  const startY=centerTile.y-Math.floor(tilesY/2);
+  for(let ty=0;ty<tilesY;ty++){
+    for(let tx=0;tx<tilesX;tx++){
+      const tileX=startX+tx;
+      const tileY=startY+ty;
+      const left=(tx-Math.floor(tilesX/2))*tileSize-offsetX+width/2;
+      const top=(ty-Math.floor(tilesY/2))*tileSize-offsetY+height/2;
+      const url=`https://cyberjapandata.gsi.go.jp/xyz/std/${zoom}/${tileX}/${tileY}.png`;
+      tilesHtml+=`<img src="${url}" style="position:absolute;left:${left}px;top:${top}px;width:${tileSize}px;height:${tileSize}px;display:block">`;
+    }
+  }
+
+  // マーカーと矢印のSVGオーバーレイ
+  let svgContent='';
+  if(markers&&markers.length>0){
+    markers.forEach(m=>{
+      const mx=(m.lng+180)/360*scale;
+      const my=(1-Math.log(Math.tan(m.lat*Math.PI/180)+1/Math.cos(m.lat*Math.PI/180))/Math.PI)/2*scale;
+      const px=(mx-centerTile.x-offsetX/tileSize)*tileSize+width/2-(startX-centerTile.x)*tileSize;
+      const py=(my-centerTile.y-offsetY/tileSize)*tileSize+height/2-(startY-centerTile.y)*tileSize;
+      // マーカー
+      svgContent+=`<circle cx="${px}" cy="${py}" r="10" fill="#E8671B" stroke="white" stroke-width="2"/>
+        <text x="${px}" y="${py+4}" text-anchor="middle" font-size="10" fill="white" font-weight="bold">${m.num}</text>`;
+      // 矢印
+      if(m.heading!=null&&!isNaN(Number(m.heading))){
+        const h=Number(m.heading);
+        const len=30;
+        const rad=h*Math.PI/180;
+        const ex=px+len*Math.sin(rad);
+        const ey=py-len*Math.cos(rad);
+        svgContent+=`<line x1="${px}" y1="${py}" x2="${ex}" y2="${ey}" stroke="#E8671B" stroke-width="2.5"/>
+          <polygon points="${ex},${ey} ${ex-6*Math.cos(rad-0.5)},${ey+6*Math.sin(rad-0.5)} ${ex-6*Math.cos(rad+0.5)},${ey+6*Math.sin(rad+0.5)}" fill="#E8671B"/>`;
+      }
+    });
+  }
+
+  // 赤枠（視点場範囲）
+  let redBoxHtml='';
+  if(redBox){
+    const bounds=getBoundsForZoom(redBox.lat,redBox.lng,redBox.zoom);
+    const sw=bounds[0],ne=bounds[1];
+    const swTileX=(sw[1]+180)/360*scale;
+    const swTileY=(1-Math.log(Math.tan(sw[0]*Math.PI/180)+1/Math.cos(sw[0]*Math.PI/180))/Math.PI)/2*scale;
+    const neTileX=(ne[1]+180)/360*scale;
+    const neTileY=(1-Math.log(Math.tan(ne[0]*Math.PI/180)+1/Math.cos(ne[0]*Math.PI/180))/Math.PI)/2*scale;
+    const rx1=(swTileX-centerTile.x-offsetX/tileSize)*tileSize+width/2-(startX-centerTile.x)*tileSize;
+    const ry1=(neTileY-centerTile.y-offsetY/tileSize)*tileSize+height/2-(startY-centerTile.y)*tileSize;
+    const rx2=(neTileX-centerTile.x-offsetX/tileSize)*tileSize+width/2-(startX-centerTile.x)*tileSize;
+    const ry2=(swTileY-centerTile.y-offsetY/tileSize)*tileSize+height/2-(startY-centerTile.y)*tileSize;
+    svgContent+=`<rect x="${rx1}" y="${ry1}" width="${rx2-rx1}" height="${ry2-ry1}" fill="none" stroke="red" stroke-width="2" stroke-dasharray="6,3"/>`;
+  }
+
+  const svgHtml=svgContent?`<svg style="position:absolute;left:0;top:0;width:${width}px;height:${height}px;z-index:10;pointer-events:none" xmlns="http://www.w3.org/2000/svg">${svgContent}</svg>`:'';
+
+  return`<div style="position:relative;width:${width}px;height:${height}px;overflow:hidden;background:#e8f0e8">${tilesHtml}${svgHtml}<div style="position:absolute;bottom:2px;right:4px;font-size:7px;color:#666;background:rgba(255,255,255,0.7);padding:1px 3px;z-index:20">©国土地理院</div></div>`;
+}
+
 function openPrintPreview(){
   closeModal('exportModal');
   const project=projects[currentProjectId];
+  const content=document.getElementById('previewContent');
+  content.innerHTML='';
 
-  // 台帳画面で表示中の地図をキャプチャしてからプレビューを表示
-  showToast('地図をキャプチャ中...');
+  if(currentPrintSize==='A3'){
+    openPrintPreviewA3(project,content);
+  }else{
+    openPrintPreviewA4(project,content);
+  }
 
-  const captureMap=(map)=>{
-    return new Promise(resolve=>{
-      if(!map){resolve(null);return;}
-      leafletImage(map,(err,canvas)=>{
-        if(err||!canvas){resolve(null);return;}
-        resolve(canvas.toDataURL('image/png'));
-      });
-    });
-  };
-
-  Promise.all([
-    captureMap(overviewMiniMap),
-    captureMap(detailMiniMap)
-  ]).then(([overviewDataUrl,detailDataUrl])=>{
-    const content=document.getElementById('previewContent');
-    content.innerHTML='';
-
-    if(currentPrintSize==='A3'){
-      openPrintPreviewA3(project,content,overviewDataUrl,detailDataUrl);
-    }else{
-      openPrintPreviewA4(project,content,overviewDataUrl,detailDataUrl);
-    }
-
-    showScreen('screen-preview');
-    showToast('プレビューの準備ができました');
-  });
+  showScreen('screen-preview');
 }
 
-function openPrintPreviewA4(project,content,overviewDataUrl,detailDataUrl){
-  const overviewImgHtml=overviewDataUrl
-    ?`<img src="${overviewDataUrl}" style="width:100%;height:100%;object-fit:cover;display:block">`
-    :'<div style="padding:10px;font-size:10px;color:#999;text-align:center">地図未設定</div>';
-  const detailImgHtml=detailDataUrl
-    ?`<img src="${detailDataUrl}" style="width:100%;height:100%;object-fit:cover;display:block">`
-    :'<div style="padding:10px;font-size:10px;color:#999;text-align:center">地図未設定</div>';
-
+function openPrintPreviewA4(project,content){
+  const overviewData=project.mapData.overview;
   project.pages.forEach((page,pi)=>{
     const sn=pi*6;
     const pageDiv=document.createElement('div');
     pageDiv.className='preview-page';
     const headerHtml=buildHeaderHtml(project,pi);
+
+    // 俯瞰図（赤枠付き）
+    const pageDetail=page.mapDetail;
+    const redBox=pageDetail?{lat:pageDetail.centerLat,lng:pageDetail.centerLng,zoom:pageDetail.zoom}:null;
+    const overviewHtml=overviewData
+      ?buildStaticMapHtml(overviewData.centerLat,overviewData.centerLng,overviewData.zoom,280,180,null,redBox)
+      :'<div style="height:180px;background:#E8ECF2;display:flex;align-items:center;justify-content:center;font-size:10px;color:#999">地図未設定</div>';
+
+    // 視点場図（マーカー・矢印付き）
+    const sn2=pi*6;
+    const markers=page.cells
+      .map((cell,i)=>cell.photo&&cell.lat?{num:sn2+i+1,lat:cell.lat,lng:cell.lng,heading:cell.heading}:null)
+      .filter(Boolean);
+    const detailHtml=pageDetail
+      ?buildStaticMapHtml(pageDetail.centerLat,pageDetail.centerLng,pageDetail.zoom,280,180,markers,null)
+      :'<div style="height:180px;background:#E8ECF2;display:flex;align-items:center;justify-content:center;font-size:10px;color:#999">地図未設定</div>';
+
     const mapsHtml=`<div class="preview-maps">
       <div class="preview-map-box">
         <div class="preview-map-label">俯瞰図</div>
-        <div class="preview-map-content">${overviewImgHtml}</div>
-        <div class="preview-attribution">©国土地理院</div>
+        <div class="preview-map-content">${overviewHtml}</div>
       </div>
       <div class="preview-map-box">
         <div class="preview-map-label">写真視点場（ページ${pi+1}）</div>
-        <div class="preview-map-content">${detailImgHtml}</div>
-        <div class="preview-attribution">©国土地理院</div>
+        <div class="preview-map-content">${detailHtml}</div>
       </div>
     </div>`;
     let photosHtml='<div class="preview-photos">';
@@ -1675,13 +1745,9 @@ function openPrintPreviewA4(project,content,overviewDataUrl,detailDataUrl){
 }
 
 // A3横レイアウト（12枚/ページ）
-function openPrintPreviewA3(project,content,overviewDataUrl,detailDataUrl){
-  const overviewImgHtml=overviewDataUrl
-    ?`<img src="${overviewDataUrl}" style="width:100%;height:100%;object-fit:cover;display:block">`
-    :'<div style="padding:10px;font-size:10px;color:#999;text-align:center">地図未設定</div>';
-  const detailImgHtml=detailDataUrl
-    ?`<img src="${detailDataUrl}" style="width:100%;height:100%;object-fit:cover;display:block">`
-    :'<div style="padding:10px;font-size:10px;color:#999;text-align:center">地図未設定</div>';
+function openPrintPreviewA3(project,content){
+  const overviewData=project.mapData.overview;
+  const allCells=[];
   project.pages.forEach((page,pi)=>{
     page.cells.forEach((cell,ci)=>{
       allCells.push({cell,pageIndex:pi,cellIndex:ci});
@@ -1714,17 +1780,28 @@ function openPrintPreviewA3(project,content,overviewDataUrl,detailDataUrl){
     const detailPage=project.pages[detailPageIndex];
     const detailData=detailPage?detailPage.mapDetail:null;
 
+    // 地図をタイル方式で生成
+    const sn2=pi*12;
+    const a3Markers=pageCells
+      .map((item,i)=>item&&item.cell.photo&&item.cell.lat?{num:sn2+i+1,lat:item.cell.lat,lng:item.cell.lng,heading:item.cell.heading}:null)
+      .filter(Boolean);
+    const redBox=detailData?{lat:detailData.centerLat,lng:detailData.centerLng,zoom:detailData.zoom}:null;
+    const overviewHtml=overviewData
+      ?buildStaticMapHtml(overviewData.centerLat,overviewData.centerLng,overviewData.zoom,320,240,null,redBox)
+      :'<div style="height:240px;background:#E8ECF2;display:flex;align-items:center;justify-content:center;font-size:10px;color:#999">地図未設定</div>';
+    const detailHtml=detailData
+      ?buildStaticMapHtml(detailData.centerLat,detailData.centerLng,detailData.zoom,320,240,a3Markers,null)
+      :'<div style="height:240px;background:#E8ECF2;display:flex;align-items:center;justify-content:center;font-size:10px;color:#999">地図未設定</div>';
+
     const bodyHtml=`<div class="a3-layout">
       <div class="a3-map-col">
         <div class="a3-map-box">
           <div class="preview-map-label">俯瞰図</div>
-          <div class="preview-map-content" style="flex:1">${overviewImgHtml}</div>
-          <div class="preview-attribution">©国土地理院</div>
+          <div class="preview-map-content" style="flex:1">${overviewHtml}</div>
         </div>
         <div class="a3-map-box">
           <div class="preview-map-label">写真視点場</div>
-          <div class="preview-map-content" style="flex:1">${detailImgHtml}</div>
-          <div class="preview-attribution">©国土地理院</div>
+          <div class="preview-map-content" style="flex:1">${detailHtml}</div>
         </div>
       </div>
       <div class="a3-photo-col">
