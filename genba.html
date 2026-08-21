@@ -167,17 +167,15 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
 .a3-photo-right{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(4,1fr);gap:6px}
 
 @media print{
-  @page{size:A4 portrait;margin:15mm 10mm}
   body{visibility:hidden}
   #screen-preview{visibility:visible;position:fixed;left:0;top:0;width:100%;background:white}
   #screen-preview *{visibility:visible}
   .app-header,.action-bar{display:none!important}
   .preview-page{box-shadow:none;border:none;page-break-after:always;max-width:100%;padding:0;margin:0}
-  #previewContent{padding:0}
+  #previewContent{padding:0;width:100%}
   .preview-header,.preview-map-label,.preview-photo-header{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   img{-webkit-print-color-adjust:exact;print-color-adjust:exact;max-width:100%}
 }
-/* A3横向き専用 - 別スタイルシートで切替 */
 #cameraInput,#libraryInput{display:none}
 .page-tabs::-webkit-scrollbar{display:none}
 </style>
@@ -1539,25 +1537,16 @@ function switchPrintSize(size){
 }
 
 function printWithGuide(){
-  // 既存の印刷用スタイルを削除
   const old=document.getElementById('printPageStyle');
   if(old)old.remove();
-
-  // A4縦 or A3横のスタイルを動的に追加
   const style=document.createElement('style');
   style.id='printPageStyle';
   if(currentPrintSize==='A3'){
-    style.textContent='@media print{@page{size:A3 landscape;margin:15mm}#previewContent{width:420mm;transform-origin:top left}}';
+    style.textContent='@media print{@page{size:A3 landscape;margin:10mm}}';
   }else{
-    style.textContent='@media print{@page{size:A4 portrait;margin:15mm 10mm}}';
+    style.textContent='@media print{@page{size:A4 portrait;margin:10mm}}';
   }
   document.head.appendChild(style);
-
-  if(!sessionStorage.getItem('printGuideShown')){
-    sessionStorage.setItem('printGuideShown','1');
-    const sizeMsg=currentPrintSize==='A3'?'A3・横向き':'A4・縦向き';
-    alert(`印刷設定：${sizeMsg}\n\n印刷ダイアログで以下を設定してください：\n・「ヘッダーとフッター」のチェックを外す\n・「背景のグラフィック」にチェックを入れる\n\n※次回からこのメッセージは表示されません`);
-  }
   window.print();
 }
 
@@ -1565,20 +1554,17 @@ function printWithGuide(){
 async function renderMapToImage(centerLat,centerLng,zoom,markers,redBox){
   return new Promise(resolve=>{
     const container=document.createElement('div');
-    container.style.cssText='position:fixed;left:-9999px;top:0;width:400px;height:300px;z-index:-1;visibility:hidden';
+    container.style.cssText='position:fixed;left:-2000px;top:0;width:500px;height:350px;z-index:9999';
     document.body.appendChild(container);
     const map=L.map(container,{zoomControl:false,attributionControl:false}).setView([centerLat,centerLng],zoom);
-    // OSMタイル（crossOrigin対応）
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
       maxZoom:19,
-      crossOrigin:true
+      crossOrigin:'anonymous'
     }).addTo(map);
-    // 赤枠
     if(redBox){
       const bounds=getBoundsForZoom(redBox.lat,redBox.lng,redBox.zoom);
       L.rectangle(bounds,{color:'red',weight:2,fill:false,dashArray:'4'}).addTo(map);
     }
-    // マーカーと矢印
     if(markers){
       markers.forEach(m=>{
         const icon=L.divIcon({className:'',html:`<div style="background:#E8671B;color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4)">${m.num}</div>`,iconSize:[20,20],iconAnchor:[10,10]});
@@ -1592,22 +1578,27 @@ async function renderMapToImage(centerLat,centerLng,zoom,markers,redBox){
         }
       });
     }
-    // タイル読み込み完了を待ってキャプチャ
+    map.invalidateSize();
+    // タイル読み込みを待ってキャプチャ
     let attempts=0;
     const tryCapture=()=>{
       attempts++;
       leafletImage(map,(err,canvas)=>{
-        if(err&&attempts<5){
-          setTimeout(tryCapture,800);
+        if(err&&attempts<8){
+          setTimeout(tryCapture,600);
           return;
         }
-        document.body.removeChild(container);
+        try{document.body.removeChild(container);}catch(e){}
         map.remove();
-        if(err||!canvas){resolve(null);return;}
+        if(err||!canvas){
+          console.error('leafletImage失敗:',err);
+          resolve(null);
+          return;
+        }
         resolve(canvas.toDataURL('image/png'));
       });
     };
-    setTimeout(tryCapture,1500);
+    setTimeout(tryCapture,2000);
   });
 }
 
@@ -1626,11 +1617,10 @@ function openPrintPreview(){
   showScreen('screen-preview');
   showToast('地図を生成中...');
 
-  // 地図を静止画像として生成して埋め込む
+  // 地図を静止画像として生成して埋め込む（DOMが確実に表示された後に実行）
   const overviewData=project.mapData.overview;
 
   setTimeout(async()=>{
-    // 各ページの俯瞰図・視点場図を生成
     for(let pi=0;pi<project.pages.length;pi++){
       const page=project.pages[pi];
       const pageDetail=page.mapDetail;
@@ -1638,18 +1628,20 @@ function openPrintPreview(){
       // 俯瞰図（赤枠付き）
       const overviewEl=document.getElementById(`previewOverview_${pi}`);
       if(overviewEl&&overviewData){
+        overviewEl.textContent='生成中...';
         const redBox=pageDetail?{lat:pageDetail.centerLat,lng:pageDetail.centerLng,zoom:pageDetail.zoom}:null;
         const dataUrl=await renderMapToImage(overviewData.centerLat,overviewData.centerLng,overviewData.zoom,null,redBox);
         if(dataUrl){
           overviewEl.innerHTML=`<img src="${dataUrl}" style="width:100%;height:100%;object-fit:cover;display:block">`;
         }else{
-          overviewEl.textContent='地図取得失敗';
+          overviewEl.textContent='地図取得失敗（電波を確認してください）';
         }
       }
 
       // 視点場図（マーカー・矢印付き）
       const detailEl=document.getElementById(`previewDetail_${pi}`);
       if(detailEl&&pageDetail){
+        detailEl.textContent='生成中...';
         const sn=currentPrintSize==='A3'?pi*12:pi*6;
         const markers=page.cells
           .map((cell,i)=>cell.photo&&cell.lat?{num:sn+i+1,lat:cell.lat,lng:cell.lng,heading:cell.heading}:null)
@@ -1658,12 +1650,12 @@ function openPrintPreview(){
         if(dataUrl){
           detailEl.innerHTML=`<img src="${dataUrl}" style="width:100%;height:100%;object-fit:cover;display:block">`;
         }else{
-          detailEl.textContent='地図取得失敗';
+          detailEl.textContent='地図取得失敗（電波を確認してください）';
         }
       }
     }
-    showToast('地図の生成が完了しました');
-  },100);
+    showToast('地図の生成が完了しました。印刷できます。');
+  },500);
 }
 
 function openPrintPreviewA4(project,content){
