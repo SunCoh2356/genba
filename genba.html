@@ -1430,37 +1430,122 @@ async function exportOriginalPhotos(){
 async function exportMapImages(){
   const project=projects[currentProjectId];
   const sn=(project.siteName||'現場台帳').replace(/[/\\:*?"<>|]/g,'_');
+  const overviewData=project.mapData.overview;
+  const page=project.pages[currentPageIndex];
+  const detailData=page?page.mapDetail:null;
   let count=0;
-  if(overviewMiniMap){
+
+  // 俯瞰図（赤枠付き）
+  if(overviewData){
     try{
-      await new Promise(resolve=>{
-        leafletImage(overviewMiniMap,(err,canvas)=>{
-          if(err){resolve();return}
-          canvas.toBlob(blob=>{
-            const url=URL.createObjectURL(blob);const a=document.createElement('a');
-            a.href=url;a.download=`${sn}_俯瞰図.png`;document.body.appendChild(a);a.click();document.body.removeChild(a);
-            setTimeout(()=>URL.revokeObjectURL(url),1000);count++;resolve();
-          },'image/png');
-        });
-      });
-      await new Promise(r=>setTimeout(r,800));
-    }catch(e){}
+      const redBox=detailData?{lat:detailData.centerLat,lng:detailData.centerLng,zoom:detailData.zoom}:null;
+      const html=buildStaticMapHtml(overviewData.centerLat,overviewData.centerLng,overviewData.zoom,800,600,null,redBox);
+      await downloadMapHtmlAsImage(html,`${sn}_俯瞰図.png`);
+      count++;
+      await new Promise(r=>setTimeout(r,500));
+    }catch(e){console.error('俯瞰図保存エラー:',e);}
   }
-  if(detailMiniMap){
+
+  // 視点場図（マーカー・矢印付き）
+  if(detailData&&page){
     try{
-      await new Promise(resolve=>{
-        leafletImage(detailMiniMap,(err,canvas)=>{
-          if(err){resolve();return}
-          canvas.toBlob(blob=>{
-            const url=URL.createObjectURL(blob);const a=document.createElement('a');
-            a.href=url;a.download=`${sn}_視点場図_P${currentPageIndex+1}.png`;document.body.appendChild(a);a.click();document.body.removeChild(a);
-            setTimeout(()=>URL.revokeObjectURL(url),1000);count++;resolve();
-          },'image/png');
-        });
-      });
-    }catch(e){}
+      const sn2=currentPageIndex*6;
+      const markers=page.cells
+        .map((cell,i)=>cell.photo&&cell.lat?{num:sn2+i+1,lat:cell.lat,lng:cell.lng,heading:cell.heading}:null)
+        .filter(Boolean);
+      const html=buildStaticMapHtml(detailData.centerLat,detailData.centerLng,detailData.zoom,800,600,markers,null);
+      await downloadMapHtmlAsImage(html,`${sn}_視点場図_P${currentPageIndex+1}.png`);
+      count++;
+    }catch(e){console.error('視点場図保存エラー:',e);}
   }
-  closeModal('exportModal');showToast(count>0?`地図画像${count}枚を保存しました`:'地図が設定されていません');
+
+  closeModal('exportModal');
+  showToast(count>0?`地図画像${count}枚を保存しました`:'地図が設定されていません');
+}
+
+// 地図HTMLをCanvasに描画してPNGダウンロード
+async function downloadMapHtmlAsImage(mapHtml,filename){
+  return new Promise(resolve=>{
+    const container=document.createElement('div');
+    container.style.cssText='position:fixed;left:-9999px;top:0;z-index:-1';
+    container.innerHTML=mapHtml;
+    document.body.appendChild(container);
+    const mapDiv=container.firstChild;
+    const w=parseInt(mapDiv.style.width);
+    const h=parseInt(mapDiv.style.height);
+
+    // 全タイル画像の読み込みを待つ
+    const imgs=container.querySelectorAll('img');
+    let loaded=0;
+    const total=imgs.length;
+    const proceed=()=>{
+      loaded++;
+      if(loaded<total)return;
+      // Canvasに描画
+      const canvas=document.createElement('canvas');
+      canvas.width=w;canvas.height=h;
+      const ctx=canvas.getContext('2d');
+      ctx.fillStyle='#e8f0e8';ctx.fillRect(0,0,w,h);
+      imgs.forEach(img=>{
+        try{
+          const l=parseInt(img.style.left)||0;
+          const t=parseInt(img.style.top)||0;
+          ctx.drawImage(img,l,t,256,256);
+        }catch(e){}
+      });
+      // SVGをCanvasに描画
+      const svg=container.querySelector('svg');
+      if(svg){
+        const svgData=new XMLSerializer().serializeToString(svg);
+        const svgBlob=new Blob([svgData],{type:'image/svg+xml'});
+        const svgUrl=URL.createObjectURL(svgBlob);
+        const svgImg=new Image();
+        svgImg.onload=()=>{
+          ctx.drawImage(svgImg,0,0,w,h);
+          URL.revokeObjectURL(svgUrl);
+          canvas.toBlob(blob=>{
+            const url=URL.createObjectURL(blob);
+            const a=document.createElement('a');
+            a.href=url;a.download=filename;
+            document.body.appendChild(a);a.click();document.body.removeChild(a);
+            setTimeout(()=>URL.revokeObjectURL(url),1000);
+            document.body.removeChild(container);
+            resolve();
+          },'image/png');
+        };
+        svgImg.onerror=()=>{
+          URL.revokeObjectURL(svgUrl);
+          canvas.toBlob(blob=>{
+            const url=URL.createObjectURL(blob);
+            const a=document.createElement('a');
+            a.href=url;a.download=filename;
+            document.body.appendChild(a);a.click();document.body.removeChild(a);
+            setTimeout(()=>URL.revokeObjectURL(url),1000);
+            document.body.removeChild(container);
+            resolve();
+          },'image/png');
+        };
+        svgImg.src=svgUrl;
+      }else{
+        canvas.toBlob(blob=>{
+          const url=URL.createObjectURL(blob);
+          const a=document.createElement('a');
+          a.href=url;a.download=filename;
+          document.body.appendChild(a);a.click();document.body.removeChild(a);
+          setTimeout(()=>URL.revokeObjectURL(url),1000);
+          document.body.removeChild(container);
+          resolve();
+        },'image/png');
+      }
+    };
+    if(total===0){proceed();return;}
+    imgs.forEach(img=>{
+      if(img.complete)proceed();
+      else{img.onload=proceed;img.onerror=proceed;}
+    });
+    // タイムアウト
+    setTimeout(()=>{document.body.removeChild(container);resolve();},5000);
+  });
 }
 
 async function exportAll(){
