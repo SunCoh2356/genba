@@ -1639,28 +1639,34 @@ function printWithGuide(){
         page-break-inside:avoid;
         box-sizing:border-box;
         overflow:hidden;
-        transform:scale(0.97);
-        transform-origin:top left;
+        display:flex;
+        flex-direction:column;
+        justify-content:center;
+        align-items:center;
       }
+      .preview-page.a3 > *{transform:scale(0.97);transform-origin:center center}
       .preview-page.a3:last-child{page-break-after:auto;break-after:auto}
     }`;
   }else{
     style.textContent=`@media print{
-      @page{size:A4 portrait;margin:5mm}
+      @page{size:A4 portrait;margin:0}
       body{margin:0;padding:0}
-      #screen-preview{position:static;width:200mm}
-      #previewContent{padding:0;width:200mm;margin:0 auto}
+      #screen-preview{position:static;width:210mm}
+      #previewContent{padding:0;width:210mm}
       .preview-page{
-        width:200mm;
+        width:210mm;
+        height:297mm;
         page-break-after:always;
         break-after:page;
         page-break-inside:avoid;
         box-sizing:border-box;
-        padding:3mm;
-        box-shadow:none;
-        border:none;
-        margin:0;
+        overflow:hidden;
+        display:flex;
+        flex-direction:column;
+        justify-content:center;
+        align-items:center;
       }
+      .preview-page > *{width:100%}
       .preview-page:last-child{page-break-after:auto;break-after:auto}
     }`;
   }
@@ -1784,16 +1790,29 @@ function buildStaticMapHtml(centerLat,centerLng,zoom,width,height,markers,redBox
       const sinM=Math.sin(m.lat*Math.PI/180);
       const mx=(m.lng+180)/360*scale-cwx+width/2;
       const my=(0.5-Math.log((1+sinM)/(1-sinM))/(4*Math.PI))*scale-cwy+height/2;
+      // マーカー（番号円）
       svgContent+=`<circle cx="${mx}" cy="${my}" r="10" fill="#E8671B" stroke="white" stroke-width="2"/>
         <text x="${mx}" y="${my+4}" text-anchor="middle" font-size="10" fill="white" font-weight="bold">${m.num}</text>`;
+      // 矢印（マーカーの端から始まる）
       if(m.heading!=null&&!isNaN(Number(m.heading))){
         const h=Number(m.heading);
-        const len=28;
         const rad=h*Math.PI/180;
-        const ex=mx+len*Math.sin(rad);
-        const ey=my-len*Math.cos(rad);
-        svgContent+=`<line x1="${mx}" y1="${my}" x2="${ex}" y2="${ey}" stroke="#E8671B" stroke-width="2.5"/>
-          <polygon points="${ex},${ey} ${ex-7*Math.cos(rad-0.5)},${ey+7*Math.sin(rad-0.5)} ${ex-7*Math.cos(rad+0.5)},${ey+7*Math.sin(rad+0.5)}" fill="#E8671B"/>`;
+        // マーカーの縁から始点を計算
+        const startX=mx+12*Math.sin(rad);
+        const startY=my-12*Math.cos(rad);
+        const len=32;
+        const endX=startX+len*Math.sin(rad);
+        const endY=startY-len*Math.cos(rad);
+        // 矢印の線
+        svgContent+=`<line x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}" stroke="#E8671B" stroke-width="2.5"/>`;
+        // 進行方向の矢印頭（endXの方向に三角形）
+        const headLen=10;
+        const headAngle=0.4;
+        const ax1=endX-headLen*Math.sin(rad-headAngle);
+        const ay1=endY+headLen*Math.cos(rad-headAngle);
+        const ax2=endX-headLen*Math.sin(rad+headAngle);
+        const ay2=endY+headLen*Math.cos(rad+headAngle);
+        svgContent+=`<polygon points="${endX},${endY} ${ax1},${ay1} ${ax2},${ay2}" fill="#E8671B"/>`;
       }
     });
   }
