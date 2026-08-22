@@ -208,7 +208,7 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
       <div>② 画面下の共有ボタン（□↑）をタップ</div>
       <div>③ 「ホーム画面に追加」をタップ</div>
       <div>④ 「追加」をタップして完了</div>
-      <div style="margin-top:8px;color:var(--danger);font-size:11px">※ GPS・位置情報が使えない場合は<br>　設定→Safari→Webサイトのデータを削除<br>　してからアプリを開き直してください</div>
+      <div style="margin-top:8px;color:var(--danger);font-size:11px">※ GPS・位置情報が使えない場合は<br> 設定→Safari→Webサイトのデータを削除<br> してからアプリを開き直してください</div>
     </div>
   </div>
 </div>
@@ -546,7 +546,7 @@ function toggleHomeGuide(){
 }
 
 function showGpsHelp(){
-  alert('GPS取得できない場合の対処方法\n\n① 設定→プライバシーとセキュリティ→位置情報サービス→Safari→「このAppの使用中のみ許可」を確認\n\n② 設定→Safari→「Webサイトのデータを削除」を実行してからアプリを開き直す\n\n③ iPhoneを再起動してから再度試す\n\n④ 屋外または窓際で試す（屋内ではGPSが取れにくい場合があります）');
+  alert('GPS取得できない場合の対処方法\n\n① 設定→プライバシーとセキュリティ→位置情報サービス→Safari→<span>「このAppの使用中のみ許可」を確認\n\n② 設定→Safari→「Webサイトのデータを削除」を実行してからアプリを開き直す\n\n③ iPhoneを再起動してから再度試す\n\n④ 屋外または窓際で試す（屋内ではGPSが取れにくい場合があります）');
 }
 
 // ===== コンパス =====
@@ -568,9 +568,7 @@ function startCompassListener(){
   window.addEventListener('deviceorientation',e=>{
     let h=e.webkitCompassHeading!==undefined?e.webkitCompassHeading:e.alpha;
     if(h===null||h===undefined)return;
-    // カメラ左横持ち：+180度補正
     h=(h+180)%360;
-    // 反転フラグ
     if(headingFlipped)h=(h+180)%360;
     currentHeading=Math.round(h);
     document.getElementById('compassDot').className='s-dot active';
@@ -609,14 +607,13 @@ function startRecording(i){
       if(final){
         const newVal=(existing?(existing+' '):'')+final;
         ta.value=newVal;
-        updateComment(i,newVal); // 確定時に即保存
+        updateComment(i,newVal);
       }else if(interim){
         ta.value=(existing?(existing+' '):'')+`[${interim}]`;
       }
     }
   };
   recognition.onend=()=>{
-    // 終了時に現在のテキストを保存（中間テキストを除去）
     if(ta){
       const finalText=ta.value.replace(/\s*\[.*?\]\s*$/,'').trim();
       ta.value=finalText;
@@ -669,7 +666,7 @@ async function createProject(){
 function createNewPage(){
   return{
     cells:[0,1,2,3,4,5].map(i=>({index:i,photo:null,comment:'',lat:null,lng:null,heading:null})),
-    mapDetail:null // ページごとの視点場図
+    mapDetail:null
   };
 }
 
@@ -678,7 +675,6 @@ async function openProject(id){
   const all=await loadAllProjects();
   const project=all.find(p=>p.id===id);if(!project)return;
   if(!project.mapData)project.mapData={overview:null,overviewScale:4};
-  // ページごとのmapDetailがない場合は初期化
   project.pages.forEach(page=>{if(!page.mapDetail)page.mapDetail=null;});
 
   if(overviewMiniMap){overviewMiniMap.remove();overviewMiniMap=null;}
@@ -704,11 +700,9 @@ async function openProject(id){
   if(!project.pages[0].mapDetail)autoSetMapFromGPS();
 }
 
-// GPS位置から地図を自動設定
 function resetDetailMap(){
   const project=projects[currentProjectId];
   const page=project.pages[currentPageIndex];
-  // 写真の座標から視点場図を強制再設定
   const photoCells=page.cells.filter(c=>c.photo&&c.lat);
   if(photoCells.length>0){
     const avgLat=photoCells.reduce((s,c)=>s+c.lat,0)/photoCells.length;
@@ -739,7 +733,6 @@ function autoSetMapFromGPS(){
   const project=projects[currentProjectId];
   if(!project)return;
 
-  // まず写真のGPS座標があればそれを優先
   const page=project.pages[currentPageIndex];
   const photoCells=page.cells.filter(c=>c.photo&&c.lat);
   if(photoCells.length>0){
@@ -749,17 +742,13 @@ function autoSetMapFromGPS(){
     return;
   }
 
-  // 写真座標がなければGPSから設定
   if(currentLat){setMapFromPosition(currentLat,currentLng);return;}
 
-  // GPS待ち（最大10秒）
   let attempts=0;
   const timer=setInterval(()=>{
     attempts++;
-    // GPS取得できたら設定
     if(currentLat){
       clearInterval(timer);
-      // 再度写真座標を優先チェック
       const photoCells2=page.cells.filter(c=>c.photo&&c.lat);
       if(photoCells2.length>0){
         const avgLat=photoCells2.reduce((s,c)=>s+c.lat,0)/photoCells2.length;
@@ -777,7 +766,6 @@ function autoSetMapFromGPS(){
 function setMapFromPosition(lat,lng){
   const project=projects[currentProjectId];if(!project)return;
   const scale=project.mapData.overviewScale||4;
-  // 俯瞰図と視点場図を同じ座標からリンクして設定
   project.mapData.overview={centerLat:lat,centerLng:lng,zoom:Math.max(10,17-scale)};
   project.pages[currentPageIndex].mapDetail={centerLat:lat,centerLng:lng,zoom:17};
   saveCurrentProject();
@@ -794,9 +782,7 @@ function renderPages(){
 function switchPage(i){
   currentPageIndex=i;
   renderPages();renderPhotoGrid();
-  // ページ切り替え時に視点場図も切り替え
   renderMiniMaps();
-  // このページの地図がなければGPSから自動設定
   const project=projects[currentProjectId];
   if(!project.pages[i].mapDetail)autoSetMapFromGPS();
 }
@@ -822,7 +808,6 @@ function deletePage(){
 function renderPhotoGrid(){
   const project=projects[currentProjectId];
   const page=project.pages[currentPageIndex];
-  // 6枚固定
   while(page.cells.length<6)page.cells.push({index:page.cells.length,photo:null,comment:'',lat:null,lng:null,heading:null});
   page.cells=page.cells.slice(0,6);
   const sn=currentPageIndex*6;
@@ -889,7 +874,6 @@ function handleFileInput(e){
   const img=new Image();
   const objectUrl=URL.createObjectURL(file);
   img.onload=()=>{
-    // A4印刷品質を保ちつつ圧縮（最大1920px・品質92%）
     const maxSize=1920;
     let w=img.width,h=img.height;
     if(w>maxSize||h>maxSize){if(w>h){h=Math.round(h*maxSize/w);w=maxSize;}else{w=Math.round(w*maxSize/h);h=maxSize;}}
@@ -898,7 +882,6 @@ function handleFileInput(e){
     canvas.getContext('2d').drawImage(img,0,0,w,h);
     const compressed=canvas.toDataURL('image/jpeg',0.92);
     URL.revokeObjectURL(objectUrl);
-    // 6枚満杯なら次ページへ
     const page=projects[currentProjectId].pages[currentPageIndex];
     const filledCount=page.cells.filter(c=>c.photo).length;
     if(filledCount>=6){
@@ -911,7 +894,6 @@ function handleFileInput(e){
     const cell=projects[currentProjectId].pages[currentPageIndex].cells[activeCellIndex];
     cell.photo=compressed;
     if(currentLat){cell.lat=currentLat;cell.lng=currentLng;}
-    // 撮影専用画面からの場合はスライダー値を優先、それ以外はコンパス値
     if(cameraScreenHeading!==null){
       cell.heading=cameraScreenHeading;
       cameraScreenHeading=null;
@@ -922,10 +904,8 @@ function handleFileInput(e){
     const kb=Math.round(compressed.length*0.75/1024);
     showToast(`写真を追加しました（${kb}KB）`+(currentLat?' 📍GPS記録済み':''));
 
-    // カメラ画面から撮影した場合、次の空きセルに移動
     const currentScreen=document.querySelector('.screen.active');
     if(currentScreen&&currentScreen.id==='screen-camera'){
-      // 次の空きセルを探す
       const currentPage=projects[currentProjectId].pages[currentPageIndex];
       const nextEmpty=currentPage.cells.findIndex((c,i)=>i>activeCellIndex&&!c.photo);
       if(nextEmpty>=0){
@@ -958,7 +938,6 @@ function renderOverviewMiniMap(){
   const div=document.createElement('div');div.style.width='100%';div.style.height='100%';div.style.minHeight='160px';wrap.appendChild(div);
   overviewMiniMap=L.map(div,{zoomControl:false,dragging:false,scrollWheelZoom:false,doubleClickZoom:false,touchZoom:false}).setView([data.centerLat,data.centerLng],data.zoom);
   L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',{maxZoom:18}).addTo(overviewMiniMap);
-  // 現在ページの視点場図の範囲を赤枠表示
   const page=project.pages[currentPageIndex];
   if(page.mapDetail){
     const bounds=getBoundsForZoom(page.mapDetail.centerLat,page.mapDetail.centerLng,page.mapDetail.zoom);
@@ -973,14 +952,12 @@ function renderDetailMiniMap(){
   const project=projects[currentProjectId];
   const page=project.pages[currentPageIndex];
 
-  // 写真のGPS座標がある場合、視点場図と俯瞰図の中心を自動調整
   const photoCells=page.cells.filter(c=>c.photo&&c.lat);
   if(photoCells.length>0){
     const avgLat=photoCells.reduce((s,c)=>s+c.lat,0)/photoCells.length;
     const avgLng=photoCells.reduce((s,c)=>s+c.lng,0)/photoCells.length;
     let needsUpdate=false;
 
-    // 視点場図の調整
     if(!page.mapDetail){
       page.mapDetail={centerLat:avgLat,centerLng:avgLng,zoom:17};
       needsUpdate=true;
@@ -994,12 +971,10 @@ function renderDetailMiniMap(){
       }
     }
 
-    // 俯瞰図も同じ座標でリンク更新
     if(needsUpdate){
       const scale=project.mapData.overviewScale||4;
       project.mapData.overview={centerLat:avgLat,centerLng:avgLng,zoom:Math.max(10,17-scale)};
       saveCurrentProject();
-      // 俯瞰図も再描画
       renderOverviewMiniMap();
     }
   }
@@ -1042,7 +1017,6 @@ function updateDetailMiniMap(){
 function openMapModal(target){
   const project=projects[currentProjectId];
   backupMapData=JSON.parse(JSON.stringify(project.mapData));
-  // ページごとのmapDetailもバックアップ
   backupMapData._pageMapDetail=JSON.parse(JSON.stringify(project.pages[currentPageIndex].mapDetail));
   document.querySelector('.ledger-screen').style.display='none';
   document.querySelector('.action-bar').style.display='none';
@@ -1055,7 +1029,6 @@ function openMapModal(target){
   document.getElementById('overviewScaleLabel').textContent=`×${scaleVal}`;
   document.getElementById('mapModal').classList.add('open');
   setTimeout(()=>{
-    // ページごとの視点場図データを使用
     const pageDetail=project.pages[currentPageIndex].mapDetail;
     let center,zoom;
     if(isOverview){
@@ -1105,7 +1078,6 @@ function confirmMapArea(){
   const center=fullMap.getCenter(),zoom=fullMap.getZoom();
   const project=projects[currentProjectId];
   if(currentMapTarget==='detail'){
-    // ページごとの視点場図として保存
     project.pages[currentPageIndex].mapDetail={centerLat:center.lat,centerLng:center.lng,zoom};
   }else{
     project.mapData.overview={centerLat:center.lat,centerLng:center.lng,zoom};
@@ -1119,7 +1091,6 @@ let cameraMap=null;
 let cameraMarker=null;
 let cameraArrowLine=null;
 let cameraArrowHead=null;
-let cameraHeadingInterval=null;
 let currentCameraHeading=0;
 
 function onCameraSliderChange(val){
@@ -1168,7 +1139,6 @@ function openCameraScreen(cellIndex){
   const num=sn+cellIndex+1;
   document.getElementById('cameraScreenTitle').textContent=`視点場${toKanji(num)} 撮影`;
 
-  // 現在のコンパス値でスライダーを初期化
   currentCameraHeading=currentHeading||0;
   document.getElementById('cameraHeadingSlider').value=currentCameraHeading;
   document.getElementById('cameraBigArrow').style.transform=`rotate(${currentCameraHeading}deg)`;
@@ -1198,10 +1168,9 @@ function openCameraScreen(cellIndex){
   },300);
 }
 
-let cameraScreenHeading=null; // 撮影専用画面からの撮影時の方向
+let cameraScreenHeading=null;
 
 function triggerCameraFromScreen(){
-  // スライダーの値を専用変数に保存してから撮影
   cameraScreenHeading=currentCameraHeading;
   document.getElementById('cameraInput').click();
 }
@@ -1210,7 +1179,6 @@ function closeCameraScreen(){
   if(cameraMap){cameraMap.remove();cameraMap=null;}
   showScreen('screen-ledger');
 }
-
 
 function openAdjustModal(){
   closeModal('photoModal');
@@ -1434,7 +1402,6 @@ async function exportMapImages(){
   const detailData=page?page.mapDetail:null;
   let count=0;
 
-  // 俯瞰図（赤枠付き）
   if(overviewData){
     try{
       const redBox=detailData?{lat:detailData.centerLat,lng:detailData.centerLng,zoom:detailData.zoom}:null;
@@ -1445,7 +1412,6 @@ async function exportMapImages(){
     }catch(e){console.error('俯瞰図保存エラー:',e);}
   }
 
-  // 視点場図（マーカー・矢印付き）
   if(detailData&&page){
     try{
       const sn2=currentPageIndex*6;
@@ -1462,7 +1428,6 @@ async function exportMapImages(){
   showToast(count>0?`地図画像${count}枚を保存しました`:'地図が設定されていません');
 }
 
-// 地図HTMLをCanvasに描画してPNGダウンロード
 async function downloadMapHtmlAsImage(mapHtml,filename){
   return new Promise(resolve=>{
     const container=document.createElement('div');
@@ -1473,14 +1438,12 @@ async function downloadMapHtmlAsImage(mapHtml,filename){
     const w=parseInt(mapDiv.style.width);
     const h=parseInt(mapDiv.style.height);
 
-    // 全タイル画像の読み込みを待つ
     const imgs=container.querySelectorAll('img');
     let loaded=0;
     const total=imgs.length;
     const proceed=()=>{
       loaded++;
       if(loaded<total)return;
-      // Canvasに描画
       const canvas=document.createElement('canvas');
       canvas.width=w;canvas.height=h;
       const ctx=canvas.getContext('2d');
@@ -1492,7 +1455,6 @@ async function downloadMapHtmlAsImage(mapHtml,filename){
           ctx.drawImage(img,l,t,256,256);
         }catch(e){}
       });
-      // SVGをCanvasに描画
       const svg=container.querySelector('svg');
       if(svg){
         const svgData=new XMLSerializer().serializeToString(svg);
@@ -1542,7 +1504,6 @@ async function downloadMapHtmlAsImage(mapHtml,filename){
       if(img.complete)proceed();
       else{img.onload=proceed;img.onerror=proceed;}
     });
-    // タイムアウト
     setTimeout(()=>{document.body.removeChild(container);resolve();},5000);
   });
 }
@@ -1621,151 +1582,60 @@ function switchPrintSize(size){
 }
 
 function printWithGuide(){
-  // 既存スタイルを削除
-  ['printPageStyle','printScaleStyle'].forEach(id=>{const e=document.getElementById(id);if(e)e.remove();});
-
-  const isA3=currentPrintSize==='A3';
-  const mmToPx=3.7795;
-  const paperW=isA3?Math.round(420*mmToPx):Math.round(210*mmToPx);
-  const paperH=Math.round(297*mmToPx);
-
-  // 用紙サイズのスタイルを設定
+  const old=document.getElementById('printPageStyle');
+  if(old)old.remove();
   const style=document.createElement('style');
   style.id='printPageStyle';
-  const pageSize=isA3?'420mm 297mm':'210mm 297mm';
-  const pageClass=isA3?'.preview-page.a3':'.preview-page';
-  style.textContent=`@media print{
-    @page{size:${pageSize};margin:0}
-    body{margin:0;padding:0}
-    #screen-preview{position:static}
-    #previewContent{padding:0}
-    ${pageClass}{
-      width:${isA3?420:210}mm;
-      height:297mm;
-      page-break-after:always;
-      break-after:page;
-      page-break-inside:avoid;
-      box-sizing:border-box;
-      overflow:hidden;
-      padding:0;
-      margin:0;
-    }
-    ${pageClass}:last-child{page-break-after:auto;break-after:auto}
-  }`;
+  if(currentPrintSize==='A3'){
+    style.textContent=`@media print{
+      @page{size:420mm 297mm;margin:5mm}
+      body{margin:0;padding:0}
+      #screen-preview{position:static;width:420mm}
+      #previewContent{padding:0;width:420mm}
+      .preview-page.a3{
+        width:410mm;
+        height:285mm;
+        page-break-after:always;
+        break-after:page;
+        page-break-inside:avoid;
+        box-sizing:border-box;
+        padding:2mm;
+        overflow:hidden;
+      }
+      .preview-page.a3:last-child{page-break-after:auto;break-after:auto}
+    }`;
+  }else{
+    style.textContent=`@media print{
+      @page{size:A4 portrait;margin:5mm}
+      body{margin:0;padding:0}
+      #screen-preview{position:static;width:100%}
+      #previewContent{padding:0;width:100%}
+      .preview-page{
+        width:190mm;
+        page-break-after:always;
+        break-after:page;
+        page-break-inside:avoid;
+        box-sizing:border-box;
+        padding:0;
+        box-shadow:none;
+        border:none;
+        margin:0 auto;
+      }
+      .preview-page:last-child{page-break-after:auto;break-after:auto}
+    }`;
+  }
   document.head.appendChild(style);
-
-  // 各ページを用紙サイズに自動スケール
-  const scaleStyle=document.createElement('style');
-  scaleStyle.id='printScaleStyle';
-  const pages=document.querySelectorAll(pageClass);
-  let scaleCSS='@media print{';
-  pages.forEach((page,i)=>{
-    const rect=page.getBoundingClientRect();
-    const scaleX=paperW/rect.width;
-    const scaleY=paperH/rect.height;
-    const scale=Math.min(scaleX,scaleY);
-    const marginX=Math.round((paperW-rect.width*scale)/2);
-    const marginY=Math.round((paperH-rect.height*scale)/2);
-    scaleCSS+=`${pageClass}:nth-child(${i+1}){transform:scale(${scale.toFixed(4)});transform-origin:top left;margin-left:${marginX}px;margin-top:${marginY}px;}`;
-  });
-  scaleCSS+='}';
-  scaleStyle.textContent=scaleCSS;
-  document.head.appendChild(scaleStyle);
-
-  setTimeout(()=>{
-    window.print();
-    setTimeout(()=>{
-      ['printPageStyle','printScaleStyle'].forEach(id=>{const e=document.getElementById(id);if(e)e.remove();});
-    },2000);
-  },200);
+  window.print();
 }
 
-// 地図を静止画像として生成してプレビューに埋め込む（OSMタイル使用でCORS回避）
-async function renderMapToImage(centerLat,centerLng,zoom,markers,redBox){
-  return new Promise(resolve=>{
-    const container=document.createElement('div');
-    container.style.cssText='position:fixed;left:-2000px;top:0;width:500px;height:350px;z-index:9999';
-    document.body.appendChild(container);
-    const map=L.map(container,{zoomControl:false,attributionControl:false}).setView([centerLat,centerLng],zoom);
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
-      maxZoom:19,
-      crossOrigin:'anonymous'
-    }).addTo(map);
-    if(redBox){
-      const bounds=getBoundsForZoom(redBox.lat,redBox.lng,redBox.zoom);
-      L.rectangle(bounds,{color:'red',weight:2,fill:false,dashArray:'4'}).addTo(map);
-    }
-    if(markers){
-      markers.forEach(m=>{
-        const icon=L.divIcon({className:'',html:`<div style="background:#E8671B;color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4)">${m.num}</div>`,iconSize:[20,20],iconAnchor:[10,10]});
-        L.marker([m.lat,m.lng],{icon}).addTo(map);
-        if(m.heading!=null&&!isNaN(Number(m.heading))){
-          const h=Number(m.heading),rad=h*Math.PI/180,len=0.0004;
-          const endLat=m.lat+len*Math.cos(rad),endLng=m.lng+len*Math.sin(rad)/Math.cos(m.lat*Math.PI/180);
-          L.polyline([[m.lat,m.lng],[endLat,endLng]],{color:'#E8671B',weight:2}).addTo(map);
-          const arrowIcon=L.divIcon({className:'',html:`<svg width="16" height="16" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg" style="transform:rotate(${h}deg);transform-origin:center;overflow:visible"><polygon points="10,2 16,18 10,14 4,18" fill="#E8671B" stroke="white" stroke-width="1.5"/></svg>`,iconSize:[16,16],iconAnchor:[8,8]});
-          L.marker([endLat,endLng],{icon:arrowIcon,interactive:false}).addTo(map);
-        }
-      });
-    }
-    map.invalidateSize();
-    // タイル読み込みを待ってキャプチャ
-    let attempts=0;
-    const tryCapture=()=>{
-      attempts++;
-      leafletImage(map,(err,canvas)=>{
-        if(err&&attempts<8){
-          setTimeout(tryCapture,600);
-          return;
-        }
-        try{document.body.removeChild(container);}catch(e){}
-        map.remove();
-        if(err||!canvas){
-          console.error('leafletImage失敗:',err);
-          resolve(null);
-          return;
-        }
-        resolve(canvas.toDataURL('image/png'));
-      });
-    };
-    setTimeout(tryCapture,2000);
-  });
-}
-
-// 緯度・経度・ズームからタイル座標を計算
-function latlngToTile(lat,lng,zoom){
-  const x=Math.floor((lng+180)/360*Math.pow(2,zoom));
-  const sinLat=Math.sin(lat*Math.PI/180);
-  const y=Math.floor((0.5-Math.log((1+sinLat)/(1-sinLat))/(4*Math.PI))*Math.pow(2,zoom));
-  return{x,y,z:zoom};
-}
-
-// 緯度経度をピクセル座標に変換（地図の中心基準）
-function latlngToPixel(lat,lng,centerLat,centerLng,zoom,width,height){
-  const scale=Math.pow(2,zoom)*256;
-  const toWorldX=(lng)=>(lng+180)/360*scale;
-  const toWorldY=(lat)=>{
-    const sinLat=Math.sin(lat*Math.PI/180);
-    return(0.5-Math.log((1+sinLat)/(1-sinLat))/(4*Math.PI))*scale;
-  };
-  const cx=toWorldX(centerLng);
-  const cy=toWorldY(centerLat);
-  const px=toWorldX(lng)-cx+width/2;
-  const py=toWorldY(lat)-cy+height/2;
-  return{px,py};
-}
-
-// 静的地図HTMLを生成（タイルをimg要素で並べる・地理院地図）
 function buildStaticMapHtml(centerLat,centerLng,zoom,width,height,markers,redBox){
   const tileSize=256;
   const scale=Math.pow(2,zoom)*tileSize;
 
-  // 中心のワールド座標
   const sinLat=Math.sin(centerLat*Math.PI/180);
   const cwx=(centerLng+180)/360*scale;
   const cwy=(0.5-Math.log((1+sinLat)/(1-sinLat))/(4*Math.PI))*scale;
 
-  // 必要なタイル範囲
   const tilesX=Math.ceil(width/tileSize)+3;
   const tilesY=Math.ceil(height/tileSize)+3;
   const centerTileX=Math.floor(cwx/tileSize);
@@ -1773,7 +1643,6 @@ function buildStaticMapHtml(centerLat,centerLng,zoom,width,height,markers,redBox
   const startTileX=centerTileX-Math.floor(tilesX/2);
   const startTileY=centerTileY-Math.floor(tilesY/2);
 
-  // タイル画像を並べる
   let tilesHtml='';
   for(let ty=0;ty<tilesY;ty++){
     for(let tx=0;tx<tilesX;tx++){
@@ -1787,31 +1656,23 @@ function buildStaticMapHtml(centerLat,centerLng,zoom,width,height,markers,redBox
     }
   }
 
-  // SVGオーバーレイ（マーカー・矢印・赤枠）
   let svgContent='';
-
-  // マーカーと矢印
   if(markers&&markers.length>0){
     markers.forEach(m=>{
       const sinM=Math.sin(m.lat*Math.PI/180);
       const mx=(m.lng+180)/360*scale-cwx+width/2;
       const my=(0.5-Math.log((1+sinM)/(1-sinM))/(4*Math.PI))*scale-cwy+height/2;
-      // マーカー（番号円）
       svgContent+=`<circle cx="${mx}" cy="${my}" r="10" fill="#E8671B" stroke="white" stroke-width="2"/>
         <text x="${mx}" y="${my+4}" text-anchor="middle" font-size="10" fill="white" font-weight="bold">${m.num}</text>`;
-      // 矢印（マーカーの端から始まる）
       if(m.heading!=null&&!isNaN(Number(m.heading))){
         const h=Number(m.heading);
         const rad=h*Math.PI/180;
-        // マーカーの縁から始点を計算
         const startX=mx+12*Math.sin(rad);
         const startY=my-12*Math.cos(rad);
         const len=32;
         const endX=startX+len*Math.sin(rad);
         const endY=startY-len*Math.cos(rad);
-        // 矢印の線
         svgContent+=`<line x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}" stroke="#E8671B" stroke-width="2.5"/>`;
-        // 進行方向の矢印頭（endXの方向に三角形）
         const headLen=10;
         const headAngle=0.4;
         const ax1=endX-headLen*Math.sin(rad-headAngle);
@@ -1823,7 +1684,6 @@ function buildStaticMapHtml(centerLat,centerLng,zoom,width,height,markers,redBox
     });
   }
 
-  // 赤枠（視点場範囲）
   if(redBox){
     const bounds=getBoundsForZoom(redBox.lat,redBox.lng,redBox.zoom);
     const sw=bounds[0],ne=bounds[1];
@@ -1862,14 +1722,12 @@ function openPrintPreviewA4(project,content){
     pageDiv.style.cssText='display:flex;flex-direction:column;height:auto';
     const headerHtml=buildHeaderHtml(project,pi);
 
-    // 俯瞰図（赤枠付き）
     const pageDetail=page.mapDetail;
     const redBox=pageDetail?{lat:pageDetail.centerLat,lng:pageDetail.centerLng,zoom:pageDetail.zoom}:null;
     const overviewHtml=overviewData
       ?buildStaticMapHtml(overviewData.centerLat,overviewData.centerLng,overviewData.zoom,360,220,null,redBox)
       :'<div style="height:220px;background:#E8ECF2;display:flex;align-items:center;justify-content:center;font-size:10px;color:#999">地図未設定</div>';
 
-    // 視点場図（マーカー・矢印付き）
     const sn2=pi*6;
     const markers=page.cells
       .map((cell,i)=>cell.photo&&cell.lat?{num:sn2+i+1,lat:cell.lat,lng:cell.lng,heading:cell.heading}:null)
@@ -1900,7 +1758,6 @@ function openPrintPreviewA4(project,content){
   });
 }
 
-// A3横レイアウト（12枚/ページ）
 function openPrintPreviewA3(project,content){
   const overviewData=project.mapData.overview;
   const allCells=[];
@@ -1918,7 +1775,6 @@ function openPrintPreviewA3(project,content){
     pageDiv.className='preview-page a3';
     const headerHtml=buildHeaderHtml(project,pi,pageCount);
 
-    // 左4枚・右8枚
     let leftPhotosHtml='';
     let rightPhotosHtml='';
     for(let i=0;i<4;i++){
@@ -1930,13 +1786,11 @@ function openPrintPreviewA3(project,content){
       rightPhotosHtml+=item?buildPhotoBoxHtml(item.cell,sn+i+1):buildPhotoBoxHtml({photo:null,comment:''},sn+i+1);
     }
 
-    // このA3ページに対応する視点場図を決定（最初の写真のページを使用）
     const firstItem=pageCells.find(item=>item&&item.cell.photo);
     const detailPageIndex=firstItem?firstItem.pageIndex:0;
     const detailPage=project.pages[detailPageIndex];
     const detailData=detailPage?detailPage.mapDetail:null;
 
-    // 地図をタイル方式で生成
     const sn2=pi*12;
     const a3Markers=pageCells
       .map((item,i)=>item&&item.cell.photo&&item.cell.lat?{num:sn2+i+1,lat:item.cell.lat,lng:item.cell.lng,heading:item.cell.heading}:null)
@@ -2029,18 +1883,14 @@ function importFile(inputEl){
       const project=JSON.parse(e.target.result);
       if(!project.id||!project.pages){showToast('このファイルは現場台帳データではありません');inputEl.value='';return}
       if(!project.mapData)project.mapData={overview:null,overviewScale:4};
-      // 互換性対応：古いmapData.detailをページごとのmapDetailに変換
       const sharedDetail=project.mapData.detail||null;
       const sharedOverview=project.mapData.overview||null;
-      // 古い形式の場合detailをoverviewとして使う
       if(!sharedOverview&&sharedDetail)project.mapData.overview=sharedDetail;
       delete project.mapData.detail;
       project.pages.forEach((page,i)=>{
-        // ページごとのmapDetailがない場合は共通のdetailを引き継ぐ
         if(!page.mapDetail)page.mapDetail=sharedDetail?JSON.parse(JSON.stringify(sharedDetail)):null;
         if(!page.cells||!Array.isArray(page.cells))page.cells=[];
         while(page.cells.length<6)page.cells.push({index:page.cells.length,photo:null,comment:'',lat:null,lng:null,heading:null});
-        // headingがnullでない場合はNumberに変換
         page.cells.forEach(cell=>{if(cell.heading!=null)cell.heading=Number(cell.heading);});
       });
       loadAllProjects().then(all=>{
