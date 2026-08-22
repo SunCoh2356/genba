@@ -1631,6 +1631,37 @@ function printWithGuide(){
   window.print();
 }
 
+// 全マーカーが収まる中心座標とズームを計算
+function calcBestView(markers,width,height){
+  if(!markers||markers.length===0)return null;
+  if(markers.length===1)return{lat:markers[0].lat,lng:markers[0].lng,zoom:16};
+
+  const lats=markers.map(m=>m.lat);
+  const lngs=markers.map(m=>m.lng);
+  const minLat=Math.min(...lats),maxLat=Math.max(...lats);
+  const minLng=Math.min(...lngs),maxLng=Math.max(...lngs);
+  const centerLat=(minLat+maxLat)/2;
+  const centerLng=(minLng+maxLng)/2;
+
+  // 必要なズームを計算（全マーカーが収まるズーム）
+  const tileSize=256;
+  const pad=1.5; // 余白係数
+  let zoom=18;
+  for(let z=18;z>=1;z--){
+    const scale=Math.pow(2,z)*tileSize;
+    const sinMin=Math.sin(minLat*Math.PI/180);
+    const sinMax=Math.sin(maxLat*Math.PI/180);
+    const py1=(0.5-Math.log((1+sinMin)/(1-sinMin))/(4*Math.PI))*scale;
+    const py2=(0.5-Math.log((1+sinMax)/(1-sinMax))/(4*Math.PI))*scale;
+    const px1=(minLng+180)/360*scale;
+    const px2=(maxLng+180)/360*scale;
+    const neededW=Math.abs(px2-px1)*pad;
+    const neededH=Math.abs(py2-py1)*pad;
+    if(neededW<=width&&neededH<=height){zoom=z;break;}
+  }
+  return{lat:centerLat,lng:centerLng,zoom:Math.min(zoom,17)};
+}
+
 function buildStaticMapHtml(centerLat,centerLng,zoom,width,height,markers,redBox){
   const tileSize=256;
   const scale=Math.pow(2,zoom)*tileSize;
@@ -1716,6 +1747,40 @@ function openPrintPreview(){
   showScreen('screen-preview');
 }
 
+// マーカーの座標から最適な中心・ズームを計算
+function calcBestMapView(markers,fallbackData,width,height){
+  if(!markers||markers.length===0){
+    if(fallbackData)return{lat:fallbackData.centerLat,lng:fallbackData.centerLng,zoom:fallbackData.zoom};
+    return null;
+  }
+  if(markers.length===1){
+    return{lat:markers[0].lat,lng:markers[0].lng,zoom:fallbackData?fallbackData.zoom:17};
+  }
+  // 全マーカーの緯度経度の範囲を計算
+  const lats=markers.map(m=>m.lat);
+  const lngs=markers.map(m=>m.lng);
+  const minLat=Math.min(...lats),maxLat=Math.max(...lats);
+  const minLng=Math.min(...lngs),maxLng=Math.max(...lngs);
+  const centerLat=(minLat+maxLat)/2;
+  const centerLng=(minLng+maxLng)/2;
+  // 全マーカーが収まるズームを計算
+  const latDiff=maxLat-minLat;
+  const lngDiff=maxLng-minLng;
+  const maxDiff=Math.max(latDiff,lngDiff*Math.cos(centerLat*Math.PI/180));
+  let zoom=17;
+  if(maxDiff>0){
+    // 1タイル=256px、全体をwidth/heightに収めるズームを計算
+    const tileSize=256;
+    const scale=Math.pow(2,zoom)*tileSize;
+    const pixDiff=maxDiff/360*scale;
+    if(pixDiff>Math.min(width,height)*0.7){
+      zoom=Math.floor(zoom-Math.log2(pixDiff/(Math.min(width,height)*0.7)));
+    }
+  }
+  zoom=Math.max(10,Math.min(18,zoom));
+  return{lat:centerLat,lng:centerLng,zoom};
+}
+
 function openPrintPreviewA4(project,content){
   const overviewData=project.mapData.overview;
   project.pages.forEach((page,pi)=>{
@@ -1725,19 +1790,24 @@ function openPrintPreviewA4(project,content){
     pageDiv.style.cssText='display:flex;flex-direction:column;height:auto';
     const headerHtml=buildHeaderHtml(project,pi);
 
+    // このページの視点場マーカー（GPS座標あるもの全て）
+    const markers=page.cells
+      .map((cell,i)=>cell.photo&&cell.lat?{num:sn+i+1,lat:cell.lat,lng:cell.lng,heading:cell.heading}:null)
+      .filter(Boolean);
+
+    // 俯瞰図：全マーカーが収まる範囲で赤枠表示
     const pageDetail=page.mapDetail;
-    const redBox=pageDetail?{lat:pageDetail.centerLat,lng:pageDetail.centerLng,zoom:pageDetail.zoom}:null;
+    const bestView=calcBestMapView(markers,pageDetail,432,264);
+    const redBox=bestView?{lat:bestView.lat,lng:bestView.lng,zoom:bestView.zoom}:null;
     const overviewHtml=overviewData
       ?buildStaticMapHtml(overviewData.centerLat,overviewData.centerLng,overviewData.zoom,432,264,null,redBox)
-      :'<div style="height:220px;background:#E8ECF2;display:flex;align-items:center;justify-content:center;font-size:10px;color:#999">地図未設定</div>';
+      :'<div style="height:264px;background:#E8ECF2;display:flex;align-items:center;justify-content:center;font-size:10px;color:#999">地図未設定</div>';
 
-    const sn2=pi*6;
-    const markers=page.cells
-      .map((cell,i)=>cell.photo&&cell.lat?{num:sn2+i+1,lat:cell.lat,lng:cell.lng,heading:cell.heading}:null)
-      .filter(Boolean);
-    const detailHtml=pageDetail
-      ?buildStaticMapHtml(pageDetail.centerLat,pageDetail.centerLng,pageDetail.zoom,432,264,markers,null)
-      :'<div style="height:220px;background:#E8ECF2;display:flex;align-items:center;justify-content:center;font-size:10px;color:#999">地図未設定</div>';
+    // 視点場図：全マーカーが収まる最適な中心・ズームを自動計算
+    const detailView=bestView||(pageDetail?{lat:pageDetail.centerLat,lng:pageDetail.centerLng,zoom:pageDetail.zoom}:null);
+    const detailHtml=detailView
+      ?buildStaticMapHtml(detailView.lat,detailView.lng,detailView.zoom,432,264,markers,null)
+      :'<div style="height:264px;background:#E8ECF2;display:flex;align-items:center;justify-content:center;font-size:10px;color:#999">地図未設定</div>';
 
     const mapsHtml=`<div class="preview-maps">
       <div class="preview-map-box">
@@ -1798,12 +1868,16 @@ function openPrintPreviewA3(project,content){
     const a3Markers=pageCells
       .map((item,i)=>item&&item.cell.photo&&item.cell.lat?{num:sn2+i+1,lat:item.cell.lat,lng:item.cell.lng,heading:item.cell.heading}:null)
       .filter(Boolean);
-    const redBox=detailData?{lat:detailData.centerLat,lng:detailData.centerLng,zoom:detailData.zoom}:null;
+
+    // 全マーカーが収まる最適な中心・ズームを自動計算
+    const bestView=calcBestMapView(a3Markers,detailData,560,360);
+    const redBox=bestView?{lat:bestView.lat,lng:bestView.lng,zoom:bestView.zoom}:null;
     const overviewHtml=overviewData
       ?buildStaticMapHtml(overviewData.centerLat,overviewData.centerLng,overviewData.zoom,560,360,null,redBox)
       :'<div style="flex:1;background:#E8ECF2;display:flex;align-items:center;justify-content:center;font-size:10px;color:#999">地図未設定</div>';
-    const detailHtml=detailData
-      ?buildStaticMapHtml(detailData.centerLat,detailData.centerLng,detailData.zoom,560,360,a3Markers,null)
+    const detailView=bestView||(detailData?{lat:detailData.centerLat,lng:detailData.centerLng,zoom:detailData.zoom}:null);
+    const detailHtml=detailView
+      ?buildStaticMapHtml(detailView.lat,detailView.lng,detailView.zoom,560,360,a3Markers,null)
       :'<div style="flex:1;background:#E8ECF2;display:flex;align-items:center;justify-content:center;font-size:10px;color:#999">地図未設定</div>';
 
     const bodyHtml=`<div class="a3-layout">
