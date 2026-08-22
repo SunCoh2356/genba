@@ -1631,51 +1631,39 @@ function printWithGuide(){
     style.textContent=`@media print{
       @page{size:420mm 297mm;margin:0}
       body{margin:0;padding:0}
-      #screen-preview{position:fixed;left:0;top:0;width:420mm;height:297mm}
-      #previewContent{
-        padding:0;
+      #screen-preview{position:fixed;left:0;top:0;width:420mm}
+      #previewContent{padding:0;width:420mm}
+      .preview-page.a3{
         width:420mm;
         height:297mm;
-        display:flex;
-        flex-direction:column;
-        align-items:center;
-        justify-content:center;
-      }
-      .preview-page.a3{
-        width:399mm;
         page-break-after:always;
+        page-break-inside:avoid;
         box-sizing:border-box;
         padding:5mm;
-        transform:scale(1.0);
-        transform-origin:center center;
+        overflow:hidden;
+        display:flex;
+        flex-direction:column;
       }
+      .preview-page.a3:last-child{page-break-after:auto}
     }`;
   }else{
     style.textContent=`@media print{
       @page{size:A4 portrait;margin:0}
       body{margin:0;padding:0}
-      #screen-preview{position:fixed;left:0;top:0;width:210mm;height:297mm}
-      #previewContent{
-        padding:0;
+      #screen-preview{position:fixed;left:0;top:0;width:210mm}
+      #previewContent{padding:0;width:210mm}
+      .preview-page{
         width:210mm;
         height:297mm;
+        page-break-after:always;
+        page-break-inside:avoid;
+        box-sizing:border-box;
+        padding:5mm;
+        overflow:hidden;
         display:flex;
         flex-direction:column;
-        align-items:center;
-        justify-content:center;
       }
-      .preview-page{
-        width:200mm;
-        page-break-after:always;
-        box-sizing:border-box;
-        padding:3mm;
-        transform:scale(0.93);
-        transform-origin:center center;
-        margin:auto;
-        position:relative;
-        top:50%;
-        transform:translateY(-50%) scale(0.93);
-      }
+      .preview-page:last-child{page-break-after:auto}
     }`;
   }
   document.head.appendChild(style);
@@ -1848,6 +1836,7 @@ function openPrintPreviewA4(project,content){
     const sn=pi*6;
     const pageDiv=document.createElement('div');
     pageDiv.className='preview-page';
+    pageDiv.style.cssText='display:flex;flex-direction:column;height:auto';
     const headerHtml=buildHeaderHtml(project,pi);
 
     // 俯瞰図（赤枠付き）
