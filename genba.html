@@ -1631,30 +1631,32 @@ function printWithGuide(){
     style.textContent=`@media print{
       @page{size:420mm 297mm;margin:0}
       body{margin:0;padding:0}
-      #screen-preview{position:fixed;left:0;top:0;width:420mm}
-      #previewContent{padding:0;width:420mm}
+      #screen-preview{position:fixed;left:0;top:0;width:420mm;height:297mm;display:flex;align-items:center;justify-content:center}
+      #previewContent{padding:0;width:420mm;display:flex;flex-direction:column;align-items:center}
       .preview-page.a3{
-        width:420mm;
+        width:399mm;
         page-break-after:always;
         box-sizing:border-box;
         padding:5mm;
         transform:scale(0.95);
-        transform-origin:top left;
+        transform-origin:center center;
+        margin:auto;
       }
     }`;
   }else{
     style.textContent=`@media print{
       @page{size:A4 portrait;margin:0}
       body{margin:0;padding:0}
-      #screen-preview{position:fixed;left:0;top:0;width:210mm}
-      #previewContent{padding:0;width:210mm}
+      #screen-preview{position:fixed;left:0;top:0;width:210mm;height:297mm;display:flex;align-items:center;justify-content:center}
+      #previewContent{padding:0;width:210mm;display:flex;flex-direction:column;align-items:center}
       .preview-page{
-        width:210mm;
+        width:200mm;
         page-break-after:always;
         box-sizing:border-box;
         padding:5mm;
         transform:scale(0.95);
-        transform-origin:top left;
+        transform-origin:center center;
+        margin:auto;
       }
     }`;
   }
