@@ -1606,24 +1606,26 @@ function printWithGuide(){
     }`;
   }else{
     style.textContent=`@media print{
-      @page{size:A4 portrait;margin:5mm}
+      @page{size:A4 portrait;margin:3mm}
       body{margin:0;padding:0}
-      #screen-preview{position:static;width:210mm}
-      #previewContent{padding:0;width:210mm}
+      #screen-preview{position:static;width:204mm}
+      #previewContent{padding:0;width:204mm}
       .preview-page{
-        width:200mm;
-        height:285mm;
+        width:204mm;
+        min-height:291mm;
         page-break-after:always;
         break-after:page;
         page-break-inside:avoid;
         box-sizing:border-box;
-        padding:2mm;
+        padding:1mm;
         overflow:hidden;
         box-shadow:none;
         border:none;
         margin:0;
       }
       .preview-page:last-child{page-break-after:auto;break-after:auto}
+      .preview-maps{height:180px}
+      .preview-photo-img{aspect-ratio:4/3}
     }`;
   }
   document.head.appendChild(style);
