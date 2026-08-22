@@ -1635,29 +1635,31 @@ function printWithGuide(){
         width:420mm;
         height:297mm;
         page-break-after:always;
-        page-break-inside:avoid;
         break-after:page;
+        page-break-inside:avoid;
         box-sizing:border-box;
-        padding:5mm;
         overflow:hidden;
+        transform:scale(0.97);
+        transform-origin:top left;
       }
       .preview-page.a3:last-child{page-break-after:auto;break-after:auto}
     }`;
   }else{
     style.textContent=`@media print{
-      @page{size:A4 portrait;margin:0}
+      @page{size:A4 portrait;margin:5mm}
       body{margin:0;padding:0}
-      #screen-preview{position:static;width:210mm}
-      #previewContent{padding:0;width:210mm}
+      #screen-preview{position:static;width:200mm}
+      #previewContent{padding:0;width:200mm;margin:0 auto}
       .preview-page{
-        width:210mm;
-        height:297mm;
+        width:200mm;
         page-break-after:always;
-        page-break-inside:avoid;
         break-after:page;
+        page-break-inside:avoid;
         box-sizing:border-box;
-        padding:5mm;
-        overflow:hidden;
+        padding:3mm;
+        box-shadow:none;
+        border:none;
+        margin:0;
       }
       .preview-page:last-child{page-break-after:auto;break-after:auto}
     }`;
