@@ -1635,10 +1635,11 @@ function printWithGuide(){
       #previewContent{padding:0;width:420mm}
       .preview-page.a3{
         width:420mm;
-        transform-origin:top left;
         page-break-after:always;
         box-sizing:border-box;
-        padding:5mm 5mm 15mm 5mm;
+        padding:5mm;
+        transform:scale(0.95);
+        transform-origin:top left;
       }
     }`;
   }else{
@@ -1649,10 +1650,11 @@ function printWithGuide(){
       #previewContent{padding:0;width:210mm}
       .preview-page{
         width:210mm;
-        transform-origin:top left;
         page-break-after:always;
         box-sizing:border-box;
-        padding:5mm 5mm 15mm 5mm;
+        padding:5mm;
+        transform:scale(0.95);
+        transform-origin:top left;
       }
     }`;
   }
