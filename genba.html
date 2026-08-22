@@ -162,7 +162,7 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
 .preview-page.a3{width:100%;max-width:100%;padding:8px;box-sizing:border-box}
 .a3-layout{display:grid;grid-template-columns:1fr 2fr;gap:6px;height:calc(100% - 32px)}
 .a3-map-col{display:flex;flex-direction:column;gap:6px;height:100%}
-.a3-map-box{flex:1;border:1px solid var(--border);border-radius:4px;overflow:hidden;display:flex;flex-direction:column;min-height:300px}
+.a3-map-box{flex:1;border:1px solid var(--border);border-radius:4px;overflow:hidden;display:flex;flex-direction:column;min-height:200px}
 .a3-photo-col{display:grid;grid-template-columns:1fr 2fr;gap:5px;height:100%}
 .a3-photo-left{display:grid;grid-template-rows:repeat(4,1fr);gap:4px}
 .a3-photo-right{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(4,1fr);gap:4px}
@@ -1668,9 +1668,10 @@ function printWithGuide(){
         width:200mm;
         page-break-after:always;
         box-sizing:border-box;
-        padding:5mm;
+        padding:3mm;
         transform:scale(0.95);
         transform-origin:center center;
+        margin:auto auto;
       }
     }`;
   }
@@ -1927,10 +1928,10 @@ function openPrintPreviewA3(project,content){
       .filter(Boolean);
     const redBox=detailData?{lat:detailData.centerLat,lng:detailData.centerLng,zoom:detailData.zoom}:null;
     const overviewHtml=overviewData
-      ?buildStaticMapHtml(overviewData.centerLat,overviewData.centerLng,overviewData.zoom,700,450,null,redBox)
+      ?buildStaticMapHtml(overviewData.centerLat,overviewData.centerLng,overviewData.zoom,560,360,null,redBox)
       :'<div style="flex:1;background:#E8ECF2;display:flex;align-items:center;justify-content:center;font-size:10px;color:#999">地図未設定</div>';
     const detailHtml=detailData
-      ?buildStaticMapHtml(detailData.centerLat,detailData.centerLng,detailData.zoom,700,450,a3Markers,null)
+      ?buildStaticMapHtml(detailData.centerLat,detailData.centerLng,detailData.zoom,560,360,a3Markers,null)
       :'<div style="flex:1;background:#E8ECF2;display:flex;align-items:center;justify-content:center;font-size:10px;color:#999">地図未設定</div>';
 
     const bodyHtml=`<div class="a3-layout">
