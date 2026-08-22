@@ -546,7 +546,7 @@ function toggleHomeGuide(){
 }
 
 function showGpsHelp(){
-  alert('GPS取得できない場合の対処方法\n\n① 設定→プライバシーとセキュリティ→位置情報サービス→Safari→<span>「このAppの使用中のみ許可」を確認\n\n② 設定→Safari→「Webサイトのデータを削除」を実行してからアプリを開き直す\n\n③ iPhoneを再起動してから再度試す\n\n④ 屋外または窓際で試す（屋内ではGPSが取れにくい場合があります）');
+  alert('GPS取得できない場合の対処方法\n\n① 設定→プライバシーとセキュリティ→位置情報サービス→Safari→「このAppの使用中のみ許可」を確認\n\n② 設定→Safari→「Webサイトのデータを削除」を実行してからアプリを開き直す\n\n③ iPhoneを再起動してから再度試す\n\n④ 屋外または窓際で試す（屋内ではGPSが取れにくい場合があります）');
 }
 
 // ===== コンパス =====
@@ -1605,21 +1605,30 @@ function printWithGuide(){
       .preview-page.a3:last-child{page-break-after:auto;break-after:auto}
     }`;
   }else{
+    // A4縦の余白と高さを最適化
     style.textContent=`@media print{
-      @page{size:A4 portrait;margin:5mm}
+      @page{size:A4 portrait;margin:4mm}
       body{margin:0;padding:0}
       #screen-preview{position:static;width:100%}
       #previewContent{padding:0;width:100%}
       .preview-page{
-        width:190mm;
+        width:202mm;
+        height:289mm;
         page-break-after:always;
         break-after:page;
         page-break-inside:avoid;
         box-sizing:border-box;
-        padding:0;
+        padding:4mm;
         box-shadow:none;
         border:none;
         margin:0 auto;
+        display:flex;
+        flex-direction:column;
+        justify-content:space-between;
+      }
+      .preview-maps{
+        height:185px !important;
+        margin-bottom:4px !important;
       }
       .preview-page:last-child{page-break-after:auto;break-after:auto}
     }`;
