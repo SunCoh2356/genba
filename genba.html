@@ -140,11 +140,10 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
 
 /* PDF印刷プレビュー - A4縦 両面印刷対応 */
 .preview-page{background:white;border:1px solid var(--border);margin-bottom:20px;box-shadow:var(--shadow);width:100%;max-width:794px;margin-left:auto;margin-right:auto;padding:15px 10px;box-sizing:border-box}
-.preview-page.a3{max-width:1122px;width:100%}
 .preview-header{background:#1B2A4A;color:white;padding:3px 8px;font-size:9px;display:flex;gap:8px;align-items:center;border-radius:2px;margin-bottom:4px;flex-wrap:nowrap;overflow:hidden;white-space:nowrap;width:100%;box-sizing:border-box}
 .preview-header span{flex-shrink:0;color:white}
 .preview-header b{font-weight:700;color:white}
-.preview-maps{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;height:220px}
+.preview-maps{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;height:264px}
 .preview-map-box{border:1px solid var(--border);border-radius:3px;overflow:hidden;display:flex;flex-direction:column}
 .preview-map-label{background:#1B2A4A;color:white;padding:2px 6px;font-size:9px;font-weight:700;flex-shrink:0}
 .preview-map-content{flex:1;background:var(--cell-bg);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--text-sub);overflow:hidden}
@@ -1729,7 +1728,7 @@ function openPrintPreviewA4(project,content){
     const pageDetail=page.mapDetail;
     const redBox=pageDetail?{lat:pageDetail.centerLat,lng:pageDetail.centerLng,zoom:pageDetail.zoom}:null;
     const overviewHtml=overviewData
-      ?buildStaticMapHtml(overviewData.centerLat,overviewData.centerLng,overviewData.zoom,360,220,null,redBox)
+      ?buildStaticMapHtml(overviewData.centerLat,overviewData.centerLng,overviewData.zoom,432,264,null,redBox)
       :'<div style="height:220px;background:#E8ECF2;display:flex;align-items:center;justify-content:center;font-size:10px;color:#999">地図未設定</div>';
 
     const sn2=pi*6;
@@ -1737,7 +1736,7 @@ function openPrintPreviewA4(project,content){
       .map((cell,i)=>cell.photo&&cell.lat?{num:sn2+i+1,lat:cell.lat,lng:cell.lng,heading:cell.heading}:null)
       .filter(Boolean);
     const detailHtml=pageDetail
-      ?buildStaticMapHtml(pageDetail.centerLat,pageDetail.centerLng,pageDetail.zoom,360,220,markers,null)
+      ?buildStaticMapHtml(pageDetail.centerLat,pageDetail.centerLng,pageDetail.zoom,432,264,markers,null)
       :'<div style="height:220px;background:#E8ECF2;display:flex;align-items:center;justify-content:center;font-size:10px;color:#999">地図未設定</div>';
 
     const mapsHtml=`<div class="preview-maps">
