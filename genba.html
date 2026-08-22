@@ -280,7 +280,7 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
               <div style="display:flex;gap:4px;flex-wrap:wrap">
                 <button class="map-cell-btn green" onclick="openDetailEditModal()">📍 位置・方向</button>
                 <button class="map-cell-btn" onclick="openMapModal('detail')">地図編集</button>
-                <button class="map-cell-btn" style="background:#666" onclick="resetDetailMap()">🔄 再設定</button>
+                <button class="map-cell-btn" style="background:#666" onclick="resetDetailMap()">🔄 自動フィット</button>
               </div>
             </div>
             <div class="map-canvas-wrap" id="detailWrap">
@@ -660,7 +660,7 @@ async function createProject(){
   const date=document.getElementById('newDate').value;
   if(!siteName){showToast('現場名を入力してください');return}
   if(!date){showToast('撮影日を入力してください');return}
-  const p={id:'proj_'+Date.now(),siteName,date,inspector:document.getElementById('newInspector').value.trim(),weather:'',note:'',createdAt:Date.now(),pages:[createNewPage()],mapData:{overview:null,overviewScale:4}};
+  const p={id:'proj_'+Date.now(),siteName,date,inspector:document.getElementById('newInspector'].value.trim(),weather:'',note:'',createdAt:Date.now(),pages:[createNewPage()],mapData:{overview:null,overviewScale:4}};
   await saveProject(p);closeModal('newProjectModal');openProject(p.id);
 }
 function createNewPage(){
@@ -700,21 +700,35 @@ async function openProject(id){
   if(!project.pages[0].mapDetail)autoSetMapFromGPS();
 }
 
+// 写真全件が収まるように自動フィット（サイズ・中心を自動計算）
 function resetDetailMap(){
   const project=projects[currentProjectId];
   const page=project.pages[currentPageIndex];
-  const photoCells=page.cells.filter(c=>c.photo&&c.lat);
+  const photoCells=page.cells.filter(c=>c.photo&&c.lat!=null&&c.lng!=null);
+  
   if(photoCells.length>0){
-    const avgLat=photoCells.reduce((s,c)=>s+c.lat,0)/photoCells.length;
-    const avgLng=photoCells.reduce((s,c)=>s+c.lng,0)/photoCells.length;
-    page.mapDetail={centerLat:avgLat,centerLng:avgLng,zoom:17};
+    const lats=photoCells.map(c=>c.lat);
+    const lngs=photoCells.map(c=>c.lng);
+    const minLat=Math.min(...lats),maxLat=Math.max(...lats);
+    const minLng=Math.min(...lngs),maxLng=Math.max(...lngs);
+    const centerLat=(minLat+maxLat)/2;
+    const centerLng=(minLng+maxLng)/2;
+
+    const maxSpan=Math.max(maxLat-minLat, maxLng-minLng);
+    let zoom=17;
+    if(maxSpan>0.01) zoom=14;
+    else if(maxSpan>0.005) zoom=15;
+    else if(maxSpan>0.002) zoom=16;
+    else zoom=17;
+
+    page.mapDetail={centerLat,centerLng,zoom};
     const scale=project.mapData.overviewScale||4;
-    project.mapData.overview={centerLat:avgLat,centerLng:avgLng,zoom:Math.max(10,17-scale)};
+    project.mapData.overview={centerLat,centerLng,zoom:Math.max(10,zoom-scale)};
     saveCurrentProject();
     if(detailMiniMap){detailMiniMap.remove();detailMiniMap=null;}
     if(overviewMiniMap){overviewMiniMap.remove();overviewMiniMap=null;}
     renderMiniMaps();
-    showToast('地図を写真座標から再設定しました');
+    showToast('写真の配置に合わせて地図を自動フィットしました');
   }else if(currentLat){
     page.mapDetail={centerLat:currentLat,centerLng:currentLng,zoom:17};
     const scale=project.mapData.overviewScale||4;
@@ -723,25 +737,21 @@ function resetDetailMap(){
     if(detailMiniMap){detailMiniMap.remove();detailMiniMap=null;}
     if(overviewMiniMap){overviewMiniMap.remove();overviewMiniMap=null;}
     renderMiniMaps();
-    showToast('地図をGPS位置から再設定しました');
+    showToast('地図を現在地から設定しました');
   }else{
-    showToast('写真のGPS座標がありません。「地図編集」から手動設定してください。');
+    showToast('位置情報のある写真がありません');
   }
 }
 
 function autoSetMapFromGPS(){
   const project=projects[currentProjectId];
   if(!project)return;
-
   const page=project.pages[currentPageIndex];
   const photoCells=page.cells.filter(c=>c.photo&&c.lat);
   if(photoCells.length>0){
-    const avgLat=photoCells.reduce((s,c)=>s+c.lat,0)/photoCells.length;
-    const avgLng=photoCells.reduce((s,c)=>s+c.lng,0)/photoCells.length;
-    setMapFromPosition(avgLat,avgLng);
+    resetDetailMap();
     return;
   }
-
   if(currentLat){setMapFromPosition(currentLat,currentLng);return;}
 
   let attempts=0;
@@ -751,9 +761,7 @@ function autoSetMapFromGPS(){
       clearInterval(timer);
       const photoCells2=page.cells.filter(c=>c.photo&&c.lat);
       if(photoCells2.length>0){
-        const avgLat=photoCells2.reduce((s,c)=>s+c.lat,0)/photoCells2.length;
-        const avgLng=photoCells2.reduce((s,c)=>s+c.lng,0)/photoCells2.length;
-        setMapFromPosition(avgLat,avgLng);
+        resetDetailMap();
       }else{
         setMapFromPosition(currentLat,currentLng);
       }
@@ -900,6 +908,10 @@ function handleFileInput(e){
     }else if(currentHeading!==null){
       cell.heading=currentHeading;
     }
+    
+    // 写真追加時に全写真が綺麗に収まるよう自動フィットを適用
+    resetDetailMap();
+
     saveCurrentProject();renderPhotoGrid();updateDetailMiniMap();
     const kb=Math.round(compressed.length*0.75/1024);
     showToast(`写真を追加しました（${kb}KB）`+(currentLat?' 📍GPS記録済み':''));
@@ -952,31 +964,10 @@ function renderDetailMiniMap(){
   const project=projects[currentProjectId];
   const page=project.pages[currentPageIndex];
 
-  const photoCells=page.cells.filter(c=>c.photo&&c.lat);
-  if(photoCells.length>0){
-    const avgLat=photoCells.reduce((s,c)=>s+c.lat,0)/photoCells.length;
-    const avgLng=photoCells.reduce((s,c)=>s+c.lng,0)/photoCells.length;
-    let needsUpdate=false;
-
-    if(!page.mapDetail){
-      page.mapDetail={centerLat:avgLat,centerLng:avgLng,zoom:17};
-      needsUpdate=true;
-    }else{
-      const latDiff=Math.abs(avgLat-page.mapDetail.centerLat);
-      const lngDiff=Math.abs(avgLng-page.mapDetail.centerLng);
-      if(latDiff>0.001||lngDiff>0.001){
-        page.mapDetail.centerLat=avgLat;
-        page.mapDetail.centerLng=avgLng;
-        needsUpdate=true;
-      }
-    }
-
-    if(needsUpdate){
-      const scale=project.mapData.overviewScale||4;
-      project.mapData.overview={centerLat:avgLat,centerLng:avgLng,zoom:Math.max(10,17-scale)};
-      saveCurrentProject();
-      renderOverviewMiniMap();
-    }
+  const photoCells=page.cells.filter(c=>c.photo&&c.lat!=null);
+  if(photoCells.length>0&&!page.mapDetail){
+    resetDetailMap();
+    return;
   }
 
   const data=page.mapDetail;
@@ -1605,7 +1596,6 @@ function printWithGuide(){
       .preview-page.a3:last-child{page-break-after:auto;break-after:auto}
     }`;
   }else{
-    // A4縦の余白と高さを最適化
     style.textContent=`@media print{
       @page{size:A4 portrait;margin:4mm}
       body{margin:0;padding:0}
@@ -1731,7 +1721,24 @@ function openPrintPreviewA4(project,content){
     pageDiv.style.cssText='display:flex;flex-direction:column;height:auto';
     const headerHtml=buildHeaderHtml(project,pi);
 
-    const pageDetail=page.mapDetail;
+    let pageDetail=page.mapDetail;
+    const pagePhotoCells=page.cells.filter(c=>c.photo&&c.lat!=null);
+    if(!pageDetail&&pagePhotoCells.length>0){
+      const lats=pagePhotoCells.map(c=>c.lat);
+      const lngs=pagePhotoCells.map(c=>c.lng);
+      const minLat=Math.min(...lats),maxLat=Math.max(...lats);
+      const minLng=Math.min(...lngs),maxLng=Math.max(...lngs);
+      const centerLat=(minLat+maxLat)/2;
+      const centerLng=(minLng+maxLng)/2;
+      const maxSpan=Math.max(maxLat-minLat, maxLng-minLng);
+      let zoom=17;
+      if(maxSpan>0.01)zoom=14;
+      else if(maxSpan>0.005)zoom=15;
+      else if(maxSpan>0.002)zoom=16;
+      else zoom=17;
+      pageDetail={centerLat,centerLng,zoom};
+    }
+
     const redBox=pageDetail?{lat:pageDetail.centerLat,lng:pageDetail.centerLng,zoom:pageDetail.zoom}:null;
     const overviewHtml=overviewData
       ?buildStaticMapHtml(overviewData.centerLat,overviewData.centerLng,overviewData.zoom,360,220,null,redBox)
@@ -1798,7 +1805,26 @@ function openPrintPreviewA3(project,content){
     const firstItem=pageCells.find(item=>item&&item.cell.photo);
     const detailPageIndex=firstItem?firstItem.pageIndex:0;
     const detailPage=project.pages[detailPageIndex];
-    const detailData=detailPage?detailPage.mapDetail:null;
+    let detailData=detailPage?detailPage.mapDetail:null;
+    
+    if(!detailData&&detailPage){
+      const dpCells=detailPage.cells.filter(c=>c.photo&&c.lat!=null);
+      if(dpCells.length>0){
+        const lats=dpCells.map(c=>c.lat);
+        const lngs=dpCells.map(c=>c.lng);
+        const minLat=Math.min(...lats),maxLat=Math.max(...lats);
+        const minLng=Math.min(...lngs),maxLng=Math.max(...lngs);
+        const centerLat=(minLat+maxLat)/2;
+        const centerLng=(minLng+maxLng)/2;
+        const maxSpan=Math.max(maxLat-minLat, maxLng-minLng);
+        let zoom=17;
+        if(maxSpan>0.01)zoom=14;
+        else if(maxSpan>0.005)zoom=15;
+        else if(maxSpan>0.002)zoom=16;
+        else zoom=17;
+        detailData={centerLat,centerLng,zoom};
+      }
+    }
 
     const sn2=pi*12;
     const a3Markers=pageCells
@@ -1825,7 +1851,7 @@ function openPrintPreviewA3(project,content){
       </div>
       <div class="a3-photo-col">
         <div class="a3-photo-left">${leftPhotosHtml}</div>
-        <div class="a3-photo-right">${rightPhotosHtml}</div>
+        <div class="a3-photo-right">${rightPhotosHtml}</li></div>
       </div>
     </div>`;
 
