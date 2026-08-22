@@ -1608,18 +1608,20 @@ function printWithGuide(){
     style.textContent=`@media print{
       @page{size:A4 portrait;margin:5mm}
       body{margin:0;padding:0}
-      #screen-preview{position:static;width:100%}
-      #previewContent{padding:0;width:100%}
+      #screen-preview{position:static;width:210mm}
+      #previewContent{padding:0;width:210mm}
       .preview-page{
-        width:190mm;
+        width:200mm;
+        height:285mm;
         page-break-after:always;
         break-after:page;
         page-break-inside:avoid;
         box-sizing:border-box;
-        padding:0;
+        padding:2mm;
+        overflow:hidden;
         box-shadow:none;
         border:none;
-        margin:0 auto;
+        margin:0;
       }
       .preview-page:last-child{page-break-after:auto;break-after:auto}
     }`;
