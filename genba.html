@@ -162,7 +162,7 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
 .preview-page.a3{width:100%;max-width:100%;padding:8px;box-sizing:border-box}
 .a3-layout{display:grid;grid-template-columns:1fr 2fr;gap:6px;height:calc(100% - 32px)}
 .a3-map-col{display:flex;flex-direction:column;gap:6px;height:100%}
-.a3-map-box{flex:1;border:1px solid var(--border);border-radius:4px;overflow:hidden;display:flex;flex-direction:column}
+.a3-map-box{flex:1;border:1px solid var(--border);border-radius:4px;overflow:hidden;display:flex;flex-direction:column;min-height:300px}
 .a3-photo-col{display:grid;grid-template-columns:1fr 2fr;gap:5px;height:100%}
 .a3-photo-left{display:grid;grid-template-rows:repeat(4,1fr);gap:4px}
 .a3-photo-right{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(4,1fr);gap:4px}
@@ -1631,8 +1631,16 @@ function printWithGuide(){
     style.textContent=`@media print{
       @page{size:420mm 297mm;margin:0}
       body{margin:0;padding:0}
-      #screen-preview{position:fixed;left:0;top:0;width:420mm;height:297mm;display:flex;align-items:center;justify-content:center}
-      #previewContent{padding:0;width:420mm;display:flex;flex-direction:column;align-items:center}
+      #screen-preview{position:fixed;left:0;top:0;width:420mm;height:297mm}
+      #previewContent{
+        padding:0;
+        width:420mm;
+        height:297mm;
+        display:flex;
+        flex-direction:column;
+        align-items:center;
+        justify-content:center;
+      }
       .preview-page.a3{
         width:399mm;
         page-break-after:always;
@@ -1640,15 +1648,22 @@ function printWithGuide(){
         padding:5mm;
         transform:scale(0.95);
         transform-origin:center center;
-        margin:auto;
       }
     }`;
   }else{
     style.textContent=`@media print{
       @page{size:A4 portrait;margin:0}
       body{margin:0;padding:0}
-      #screen-preview{position:fixed;left:0;top:0;width:210mm;height:297mm;display:flex;align-items:center;justify-content:center}
-      #previewContent{padding:0;width:210mm;display:flex;flex-direction:column;align-items:center}
+      #screen-preview{position:fixed;left:0;top:0;width:210mm;height:297mm}
+      #previewContent{
+        padding:0;
+        width:210mm;
+        height:297mm;
+        display:flex;
+        flex-direction:column;
+        align-items:center;
+        justify-content:center;
+      }
       .preview-page{
         width:200mm;
         page-break-after:always;
@@ -1656,7 +1671,6 @@ function printWithGuide(){
         padding:5mm;
         transform:scale(0.95);
         transform-origin:center center;
-        margin:auto;
       }
     }`;
   }
@@ -1806,7 +1820,7 @@ function buildStaticMapHtml(centerLat,centerLng,zoom,width,height,markers,redBox
 
   const svgHtml=svgContent?`<svg style="position:absolute;left:0;top:0;width:${width}px;height:${height}px;z-index:10;pointer-events:none;overflow:visible" xmlns="http://www.w3.org/2000/svg">${svgContent}</svg>`:'';
 
-  return`<div style="position:relative;width:${width}px;height:${height}px;overflow:hidden;background:#e8f0e8">${tilesHtml}${svgHtml}<div style="position:absolute;bottom:2px;right:4px;font-size:7px;color:#333;background:rgba(255,255,255,0.8);padding:1px 3px;z-index:20">©国土地理院</div></div>`;
+  return`<div style="position:relative;width:100%;height:100%;min-width:${width}px;min-height:${height}px;overflow:hidden;background:#e8f0e8">${tilesHtml}${svgHtml}<div style="position:absolute;bottom:2px;right:4px;font-size:7px;color:#333;background:rgba(255,255,255,0.8);padding:1px 3px;z-index:20">©国土地理院</div></div>`;
 }
 
 function openPrintPreview(){
@@ -1913,10 +1927,10 @@ function openPrintPreviewA3(project,content){
       .filter(Boolean);
     const redBox=detailData?{lat:detailData.centerLat,lng:detailData.centerLng,zoom:detailData.zoom}:null;
     const overviewHtml=overviewData
-      ?buildStaticMapHtml(overviewData.centerLat,overviewData.centerLng,overviewData.zoom,480,320,null,redBox)
+      ?buildStaticMapHtml(overviewData.centerLat,overviewData.centerLng,overviewData.zoom,700,450,null,redBox)
       :'<div style="flex:1;background:#E8ECF2;display:flex;align-items:center;justify-content:center;font-size:10px;color:#999">地図未設定</div>';
     const detailHtml=detailData
-      ?buildStaticMapHtml(detailData.centerLat,detailData.centerLng,detailData.zoom,480,320,a3Markers,null)
+      ?buildStaticMapHtml(detailData.centerLat,detailData.centerLng,detailData.zoom,700,450,a3Markers,null)
       :'<div style="flex:1;background:#E8ECF2;display:flex;align-items:center;justify-content:center;font-size:10px;color:#999">地図未設定</div>';
 
     const bodyHtml=`<div class="a3-layout">
