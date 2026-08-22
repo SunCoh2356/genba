@@ -1646,7 +1646,7 @@ function printWithGuide(){
         page-break-after:always;
         box-sizing:border-box;
         padding:5mm;
-        transform:scale(0.95);
+        transform:scale(1.0);
         transform-origin:center center;
       }
     }`;
@@ -1669,9 +1669,12 @@ function printWithGuide(){
         page-break-after:always;
         box-sizing:border-box;
         padding:3mm;
-        transform:scale(0.95);
+        transform:scale(0.93);
         transform-origin:center center;
-        margin:auto auto;
+        margin:auto;
+        position:relative;
+        top:50%;
+        transform:translateY(-50%) scale(0.93);
       }
     }`;
   }
