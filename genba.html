@@ -1621,52 +1621,63 @@ function switchPrintSize(size){
 }
 
 function printWithGuide(){
-  const old=document.getElementById('printPageStyle');
-  if(old)old.remove();
+  // 既存スタイルを削除
+  ['printPageStyle','printScaleStyle'].forEach(id=>{const e=document.getElementById(id);if(e)e.remove();});
+
+  const isA3=currentPrintSize==='A3';
+  const mmToPx=3.7795;
+  const paperW=isA3?Math.round(420*mmToPx):Math.round(210*mmToPx);
+  const paperH=Math.round(297*mmToPx);
+
+  // 用紙サイズのスタイルを設定
   const style=document.createElement('style');
   style.id='printPageStyle';
-  if(currentPrintSize==='A3'){
-    style.textContent=`@media print{
-      @page{size:420mm 297mm;margin:0}
-      body{margin:0;padding:0}
-      #screen-preview{position:static;width:420mm}
-      #previewContent{padding:0;width:420mm}
-      .preview-page.a3{
-        width:420mm;
-        height:297mm;
-        page-break-after:always;
-        break-after:page;
-        page-break-inside:avoid;
-        box-sizing:border-box;
-        padding:3mm;
-        overflow:hidden;
-        transform:scale(0.97);
-        transform-origin:top left;
-      }
-      .preview-page.a3:last-child{page-break-after:auto;break-after:auto}
-    }`;
-  }else{
-    style.textContent=`@media print{
-      @page{size:A4 portrait;margin:8mm}
-      body{margin:0;padding:0}
-      #screen-preview{position:static;width:100%}
-      #previewContent{padding:0;width:100%}
-      .preview-page{
-        width:100%;
-        page-break-after:always;
-        break-after:page;
-        page-break-inside:avoid;
-        box-sizing:border-box;
-        padding:0;
-        box-shadow:none;
-        border:none;
-        margin:0;
-      }
-      .preview-page:last-child{page-break-after:auto;break-after:auto}
-    }`;
-  }
+  const pageSize=isA3?'420mm 297mm':'210mm 297mm';
+  const pageClass=isA3?'.preview-page.a3':'.preview-page';
+  style.textContent=`@media print{
+    @page{size:${pageSize};margin:0}
+    body{margin:0;padding:0}
+    #screen-preview{position:static}
+    #previewContent{padding:0}
+    ${pageClass}{
+      width:${isA3?420:210}mm;
+      height:297mm;
+      page-break-after:always;
+      break-after:page;
+      page-break-inside:avoid;
+      box-sizing:border-box;
+      overflow:hidden;
+      padding:0;
+      margin:0;
+    }
+    ${pageClass}:last-child{page-break-after:auto;break-after:auto}
+  }`;
   document.head.appendChild(style);
-  window.print();
+
+  // 各ページを用紙サイズに自動スケール
+  const scaleStyle=document.createElement('style');
+  scaleStyle.id='printScaleStyle';
+  const pages=document.querySelectorAll(pageClass);
+  let scaleCSS='@media print{';
+  pages.forEach((page,i)=>{
+    const rect=page.getBoundingClientRect();
+    const scaleX=paperW/rect.width;
+    const scaleY=paperH/rect.height;
+    const scale=Math.min(scaleX,scaleY);
+    const marginX=Math.round((paperW-rect.width*scale)/2);
+    const marginY=Math.round((paperH-rect.height*scale)/2);
+    scaleCSS+=`${pageClass}:nth-child(${i+1}){transform:scale(${scale.toFixed(4)});transform-origin:top left;margin-left:${marginX}px;margin-top:${marginY}px;}`;
+  });
+  scaleCSS+='}';
+  scaleStyle.textContent=scaleCSS;
+  document.head.appendChild(scaleStyle);
+
+  setTimeout(()=>{
+    window.print();
+    setTimeout(()=>{
+      ['printPageStyle','printScaleStyle'].forEach(id=>{const e=document.getElementById(id);if(e)e.remove();});
+    },2000);
+  },200);
 }
 
 // 地図を静止画像として生成してプレビューに埋め込む（OSMタイル使用でCORS回避）
