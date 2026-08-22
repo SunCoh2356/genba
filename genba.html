@@ -1604,27 +1604,33 @@ function printWithGuide(){
       .preview-page.a3:last-child{page-break-after:auto;break-after:auto}
     }`;
   }else{
+    // プレビューページの実際のサイズを取得してスケール計算
+    const page=document.querySelector('.preview-page');
+    const pageW=page?page.offsetWidth:794;
+    const pageH=page?page.offsetHeight:1000;
+    // A4用紙サイズ(px) margin:3mmを引く
+    const paperW=Math.round((210-6)*3.7795);
+    const paperH=Math.round((297-6)*3.7795);
+    const scale=Math.min(paperW/pageW,paperH/pageH,1.0);
+
     style.textContent=`@media print{
       @page{size:A4 portrait;margin:3mm}
       body{margin:0;padding:0}
-      #screen-preview{position:static;width:204mm}
-      #previewContent{padding:0;width:204mm}
+      #screen-preview{position:static}
+      #previewContent{padding:0}
       .preview-page{
-        width:204mm;
-        min-height:291mm;
+        width:${pageW}px;
+        transform:scale(${scale.toFixed(4)});
+        transform-origin:top left;
         page-break-after:always;
         break-after:page;
         page-break-inside:avoid;
         box-sizing:border-box;
-        padding:1mm;
-        overflow:hidden;
         box-shadow:none;
         border:none;
         margin:0;
       }
       .preview-page:last-child{page-break-after:auto;break-after:auto}
-      .preview-maps{height:180px}
-      .preview-photo-img{aspect-ratio:4/3}
     }`;
   }
   document.head.appendChild(style);
