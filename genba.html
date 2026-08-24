@@ -395,6 +395,31 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
   <div style="padding:8px;padding-bottom:100px;background:var(--bg);width:100%;box-sizing:border-box;overflow-x:auto" id="previewContent"></div>
 </div>
 
+<!-- 番号表示方法選択モーダル -->
+<div class="modal-overlay" id="printNumberModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <h3>写真の番号表示方法</h3>
+    <p style="font-size:13px;color:var(--text-sub);text-align:center;margin-bottom:16px">空の視点場がある場合の表示方法を選択してください</p>
+    <div class="export-card" onclick="startPrintPreview('original')">
+      <div class="export-icon">🔢</div>
+      <h4>元の番号のまま詰める</h4>
+      <p>写真がある枠だけ詰めて表示。番号は元のまま（例：①③⑤）</p>
+    </div>
+    <div class="export-card" onclick="startPrintPreview('renumber')">
+      <div class="export-icon">📝</div>
+      <h4>番号を振り直して詰める</h4>
+      <p>写真がある枠を連番で表示（例：①②③）</p>
+    </div>
+    <div class="export-card" onclick="startPrintPreview('keep')">
+      <div class="export-icon">📋</div>
+      <h4>空欄のまま表示（現在の動作）</h4>
+      <p>写真なしの枠も表示する</p>
+    </div>
+    <button class="btn btn-ghost btn-full" onclick="closeModal('printNumberModal')">キャンセル</button>
+  </div>
+</div>
+
 <!-- 地図フルスクリーン -->
 <div class="map-modal-overlay" id="mapModal">
   <div class="map-modal-header">
@@ -1727,18 +1752,24 @@ function buildStaticMapHtml(centerLat,centerLng,zoom,width,height,markers,redBox
   return`<div style="position:relative;width:100%;height:100%;min-width:${width}px;min-height:${height}px;overflow:hidden;background:#e8f0e8">${tilesHtml}${svgHtml}<div style="position:absolute;bottom:2px;right:4px;font-size:7px;color:#333;background:rgba(255,255,255,0.8);padding:1px 3px;z-index:20">©国土地理院</div></div>`;
 }
 
+let currentPrintNumberMode='keep';
+
 function openPrintPreview(){
   closeModal('exportModal');
+  openModal('printNumberModal');
+}
+
+function startPrintPreview(mode){
+  closeModal('printNumberModal');
+  currentPrintNumberMode=mode;
   const project=projects[currentProjectId];
   const content=document.getElementById('previewContent');
   content.innerHTML='';
-
   if(currentPrintSize==='A3'){
     openPrintPreviewA3(project,content);
   }else{
     openPrintPreviewA4(project,content);
   }
-
   showScreen('screen-preview');
 }
 
@@ -1780,25 +1811,43 @@ function openPrintPreviewA4(project,content){
   const overviewData=project.mapData.overview;
   project.pages.forEach((page,pi)=>{
     const sn=pi*6;
+
+    // モードに応じてセルを処理
+    let cells=page.cells;
+    let displayCells=[];
+    if(currentPrintNumberMode==='keep'){
+      // 空欄のまま全表示
+      displayCells=cells.map((cell,i)=>({cell,num:sn+i+1}));
+    }else if(currentPrintNumberMode==='original'){
+      // 写真ありだけ詰める（番号は元のまま）
+      displayCells=cells
+        .map((cell,i)=>({cell,num:sn+i+1}))
+        .filter(item=>item.cell.photo);
+    }else if(currentPrintNumberMode==='renumber'){
+      // 写真ありだけ詰めて連番
+      let seq=sn+1;
+      displayCells=cells
+        .filter(cell=>cell.photo)
+        .map(cell=>({cell,num:seq++}));
+    }
+
+    if(displayCells.length===0)return; // 写真なしページはスキップ
     const pageDiv=document.createElement('div');
     pageDiv.className='preview-page';
     pageDiv.style.cssText='display:flex;flex-direction:column;height:auto';
     const headerHtml=buildHeaderHtml(project,pi);
 
-    // このページの視点場マーカー（GPS座標あるもの全て）
-    const markers=page.cells
-      .map((cell,i)=>cell.photo&&cell.lat?{num:sn+i+1,lat:cell.lat,lng:cell.lng,heading:cell.heading}:null)
-      .filter(Boolean);
+    // マーカー生成
+    const markers=displayCells
+      .filter(item=>item.cell.lat)
+      .map(item=>({num:item.num,lat:item.cell.lat,lng:item.cell.lng,heading:item.cell.heading}));
 
-    // 俯瞰図：全マーカーが収まる範囲で赤枠表示
     const pageDetail=page.mapDetail;
     const bestView=calcBestMapView(markers,pageDetail,432,264);
     const redBox=bestView?{lat:bestView.lat,lng:bestView.lng,zoom:bestView.zoom}:null;
     const overviewHtml=overviewData
       ?buildStaticMapHtml(overviewData.centerLat,overviewData.centerLng,overviewData.zoom,432,264,null,redBox)
       :'<div style="height:264px;background:#E8ECF2;display:flex;align-items:center;justify-content:center;font-size:10px;color:#999">地図未設定</div>';
-
-    // 視点場図：全マーカーが収まる最適な中心・ズームを自動計算
     const detailView=bestView||(pageDetail?{lat:pageDetail.centerLat,lng:pageDetail.centerLng,zoom:pageDetail.zoom}:null);
     const detailHtml=detailView
       ?buildStaticMapHtml(detailView.lat,detailView.lng,detailView.zoom,432,264,markers,null)
@@ -1814,12 +1863,11 @@ function openPrintPreviewA4(project,content){
         <div class="preview-map-content">${detailHtml}</div>
       </div>
     </div>`;
+
     let photosHtml='<div class="preview-photos">';
-    for(let i=0;i<6;i++){
-      const cell=page.cells[i]||{photo:null,comment:''};
-      const num=sn+i+1;
-      photosHtml+=buildPhotoBoxHtml(cell,num);
-    }
+    displayCells.forEach(item=>{
+      photosHtml+=buildPhotoBoxHtml(item.cell,item.num);
+    });
     photosHtml+='</div>';
     pageDiv.innerHTML=headerHtml+mapsHtml+photosHtml;
     content.appendChild(pageDiv);
