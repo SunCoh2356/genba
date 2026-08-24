@@ -1891,32 +1891,47 @@ function openPrintPreviewA3(project,content){
     pageDiv.className='preview-page a3';
     const headerHtml=buildHeaderHtml(project,pi,pageCount);
 
-    // 左①②③④・中⑤⑥⑦⑧・右⑨⑩⑪⑫の縦並び
-    let leftPhotosHtml='';
-    let midPhotosHtml='';
-    let rightPhotosHtml='';
-    for(let i=0;i<4;i++){
-      const item=pageCells[i];
-      leftPhotosHtml+=item?buildPhotoBoxHtml(item.cell,sn+i+1):buildPhotoBoxHtml({photo:null,comment:''},sn+i+1);
-    }
-    for(let i=4;i<8;i++){
-      const item=pageCells[i];
-      midPhotosHtml+=item?buildPhotoBoxHtml(item.cell,sn+i+1):buildPhotoBoxHtml({photo:null,comment:''},sn+i+1);
-    }
-    for(let i=8;i<12;i++){
-      const item=pageCells[i];
-      rightPhotosHtml+=item?buildPhotoBoxHtml(item.cell,sn+i+1):buildPhotoBoxHtml({photo:null,comment:''},sn+i+1);
+    // モードに応じて表示セルを決定
+    let displayItems=[];
+    if(currentPrintNumberMode==='keep'){
+      displayItems=pageCells.map((item,i)=>({cell:item?item.cell:{photo:null,comment:''},num:sn+i+1}));
+    }else if(currentPrintNumberMode==='original'){
+      displayItems=pageCells
+        .map((item,i)=>({cell:item?item.cell:{photo:null,comment:''},num:sn+i+1}))
+        .filter(item=>item.cell.photo);
+    }else if(currentPrintNumberMode==='renumber'){
+      let seq=sn+1;
+      displayItems=pageCells
+        .filter(item=>item&&item.cell.photo)
+        .map(item=>({cell:item.cell,num:seq++}));
     }
 
-    const firstItem=pageCells.find(item=>item&&item.cell.photo);
-    const detailPageIndex=firstItem?firstItem.pageIndex:0;
-    const detailPage=project.pages[detailPageIndex];
+    if(displayItems.length===0)return;
+
+    // 3列に均等分配（縦方向に詰める）
+    const rows=Math.ceil(displayItems.length/3);
+    const leftItems=displayItems.slice(0,rows);
+    const midItems=displayItems.slice(rows,rows*2);
+    const rightItems=displayItems.slice(rows*2,rows*3);
+
+    // 各列を4行になるよう空埋め
+    while(leftItems.length<4)leftItems.push(null);
+    while(midItems.length<4)midItems.push(null);
+    while(rightItems.length<4)rightItems.push(null);
+
+    let leftPhotosHtml='',midPhotosHtml='',rightPhotosHtml='';
+    leftItems.forEach(item=>{leftPhotosHtml+=item?buildPhotoBoxHtml(item.cell,item.num):'<div></div>';});
+    midItems.forEach(item=>{midPhotosHtml+=item?buildPhotoBoxHtml(item.cell,item.num):'<div></div>';});
+    rightItems.forEach(item=>{rightPhotosHtml+=item?buildPhotoBoxHtml(item.cell,item.num):'<div></div>';});
+
+    const firstItem=displayItems.find(item=>item&&item.cell.photo);
+    const detailPageIndex=firstItem?(pageCells.find(p=>p&&p.cell===firstItem.cell)||{pageIndex:0}).pageIndex:0;
+    const detailPage=project.pages[detailPageIndex]||project.pages[0];
     const detailData=detailPage?detailPage.mapDetail:null;
 
-    const sn2=pi*12;
-    const a3Markers=pageCells
-      .map((item,i)=>item&&item.cell.photo&&item.cell.lat?{num:sn2+i+1,lat:item.cell.lat,lng:item.cell.lng,heading:item.cell.heading}:null)
-      .filter(Boolean);
+    const a3Markers=displayItems
+      .filter(item=>item&&item.cell.lat)
+      .map(item=>({num:item.num,lat:item.cell.lat,lng:item.cell.lng,heading:item.cell.heading}));
 
     // 全マーカーが収まる最適な中心・ズームを自動計算
     const bestView=calcBestMapView(a3Markers,detailData,560,360);
