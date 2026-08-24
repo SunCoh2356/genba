@@ -162,9 +162,8 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
 .a3-layout{display:grid;grid-template-columns:1fr 2fr;gap:4px;height:calc(100% - 24px)}
 .a3-map-col{display:flex;flex-direction:column;gap:4px;height:100%}
 .a3-map-box{flex:1;border:1px solid var(--border);border-radius:3px;overflow:hidden;display:flex;flex-direction:column;min-height:180px}
-.a3-photo-col{display:grid;grid-template-columns:1fr 2fr;gap:4px;height:100%}
+.a3-photo-col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;height:100%}
 .a3-photo-left{display:grid;grid-template-rows:repeat(4,1fr);gap:3px}
-.a3-photo-right{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(4,1fr);gap:3px}
 
 @media print{
   body{visibility:hidden}
@@ -1709,7 +1708,7 @@ function buildStaticMapHtml(centerLat,centerLng,zoom,width,height,markers,redBox
         const ly=cy-size*Math.cos(rad-2.2);
         const rx=cx+size*Math.sin(rad+2.2);
         const ry=cy-size*Math.cos(rad+2.2);
-        svgContent+=`<polygon points="${tx},${ty} ${lx},${ly} ${rx},${ry}" fill="#E8671B" stroke="white" stroke-width="1"/>`;
+        svgContent+=`<polygon points="${tx},${ty} ${lx},${ly} ${rx},${ry}" fill="#333333" stroke="white" stroke-width="1"/>`;
       }
     });
   }
@@ -1844,13 +1843,19 @@ function openPrintPreviewA3(project,content){
     pageDiv.className='preview-page a3';
     const headerHtml=buildHeaderHtml(project,pi,pageCount);
 
+    // 左①②③④・中⑤⑥⑦⑧・右⑨⑩⑪⑫の縦並び
     let leftPhotosHtml='';
+    let midPhotosHtml='';
     let rightPhotosHtml='';
     for(let i=0;i<4;i++){
       const item=pageCells[i];
       leftPhotosHtml+=item?buildPhotoBoxHtml(item.cell,sn+i+1):buildPhotoBoxHtml({photo:null,comment:''},sn+i+1);
     }
-    for(let i=4;i<12;i++){
+    for(let i=4;i<8;i++){
+      const item=pageCells[i];
+      midPhotosHtml+=item?buildPhotoBoxHtml(item.cell,sn+i+1):buildPhotoBoxHtml({photo:null,comment:''},sn+i+1);
+    }
+    for(let i=8;i<12;i++){
       const item=pageCells[i];
       rightPhotosHtml+=item?buildPhotoBoxHtml(item.cell,sn+i+1):buildPhotoBoxHtml({photo:null,comment:''},sn+i+1);
     }
@@ -1889,7 +1894,8 @@ function openPrintPreviewA3(project,content){
       </div>
       <div class="a3-photo-col">
         <div class="a3-photo-left">${leftPhotosHtml}</div>
-        <div class="a3-photo-right">${rightPhotosHtml}</div>
+        <div class="a3-photo-left">${midPhotosHtml}</div>
+        <div class="a3-photo-left">${rightPhotosHtml}</div>
       </div>
     </div>`;
 
