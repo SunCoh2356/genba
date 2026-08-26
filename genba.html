@@ -11,6 +11,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://unpkg.com/leaflet-image@0.4.0/leaflet-image.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 <script>
 if('serviceWorker' in navigator){
   window.addEventListener('load',()=>{
@@ -473,6 +474,7 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
       <div class="export-card" onclick="exportCsv()"><div class="export-icon">📊</div><h4>CSVデータ書き出し</h4><p>台帳データをCSVで保存します。Excelで開けます。</p></div>
       <div class="export-card" onclick="exportOriginalPhotos()"><div class="export-icon">🖼️</div><h4>オリジナル写真をPC保存</h4><p>全写真を元の画質のままPCに保存します。</p></div>
       <div class="export-card" onclick="exportMapImages()"><div class="export-icon">🗺️</div><h4>地図画像を保存</h4><p>俯瞰図・視点場図をPNG画像で保存します。</p></div>
+      <div class="export-card" onclick="exportExcel()"><div class="export-icon">📊</div><h4>Excel台帳書き出し（A4）</h4><p>PDFと同じレイアウトでExcelに書き出します。コメントはセルで編集できます。</p></div>
       <div class="export-card" onclick="openPrintPreview()"><div class="export-icon">📄</div><h4>PDF印刷プレビュー</h4><p>台帳のレイアウトを確認してから印刷・PDF保存できます。</p></div>
     </div>
     <button class="btn btn-ghost btn-full" onclick="closeModal('exportModal')">キャンセル</button>
@@ -1492,6 +1494,156 @@ function closeReorder(){
   showScreen('screen-ledger');
 }
 function openExportModal(){openModal('exportModal')}
+
+// ===== Excel書き出し =====
+async function exportExcel(){
+  closeModal('exportModal');
+  showToast('Excel生成中...しばらくお待ちください');
+  const project=projects[currentProjectId];
+  const wb=XLSX.utils.book_new();
+  const fn=(project.siteName||'現場台帳').replace(/[\/\\:*?"<>|]/g,'_');
+
+  for(let pi=0;pi<project.pages.length;pi++){
+    const page=project.pages[pi];
+    const sn=pi*6;
+
+    // ワークシート作成
+    const ws={};
+    const merges=[];
+
+    // 列幅（A:余白, B:地図/写真左, C:余白, D:地図/写真右, E:余白）
+    ws['!cols']=[{wch:1},{wch:38},{wch:1},{wch:38},{wch:1}];
+
+    // ===== ヘッダー行（行0） =====
+    const hdr=`現場名: ${project.siteName||''}　調査日: ${project.date||''}　調査者: ${project.inspector||''}　天気: ${project.weather||''}　ページ: ${pi+1}/${project.pages.length}`;
+    ws['A1']={v:hdr,t:'s'};
+    merges.push({s:{r:0,c:0},e:{r:0,c:4}});
+
+    // ===== 地図ラベル行（行1） =====
+    ws['B2']={v:'俯瞰図',t:'s'};
+    ws['D2']={v:`写真視点場（ページ${pi+1}）`,t:'s'};
+    merges.push({s:{r:1,c:1},e:{r:1,c:1}});
+    merges.push({s:{r:1,c:3},e:{r:1,c:3}});
+
+    // 地図エリア（行2-11、高さ10行分）
+    for(let r=2;r<12;r++){
+      ws[`B${r+1}`]={v:'',t:'s'};
+      ws[`D${r+1}`]={v:'',t:'s'};
+    }
+    merges.push({s:{r:2,c:1},e:{r:11,c:1}});
+    merges.push({s:{r:2,c:3},e:{r:11,c:3}});
+
+    // 行高設定
+    const rowH=[];
+    rowH.push({hpt:18}); // 行1：ヘッダー
+    rowH.push({hpt:14}); // 行2：地図ラベル
+    for(let r=0;r<10;r++) rowH.push({hpt:16}); // 行3-12：地図エリア
+
+    // ===== 写真グリッド（3行×2列） =====
+    const photoStartRow=12; // 0-indexed
+    for(let row=0;row<3;row++){
+      const baseR=photoStartRow+row*7;
+      const leftCell=page.cells[row*2]||{photo:null,comment:''};
+      const rightCell=page.cells[row*2+1]||{photo:null,comment:''};
+      const leftNum=sn+row*2+1;
+      const rightNum=sn+row*2+2;
+
+      // 視点場番号ヘッダー
+      ws[XLSX.utils.encode_cell({r:baseR,c:1})]={v:`視点場${toKanji(leftNum)}`,t:'s'};
+      ws[XLSX.utils.encode_cell({r:baseR,c:3})]={v:`視点場${toKanji(rightNum)}`,t:'s'};
+      rowH.push({hpt:14});
+
+      // 写真エリア（5行）
+      for(let r=1;r<=5;r++){
+        ws[XLSX.utils.encode_cell({r:baseR+r,c:1})]={v:'',t:'s'};
+        ws[XLSX.utils.encode_cell({r:baseR+r,c:3})]={v:'',t:'s'};
+        rowH.push({hpt:16});
+      }
+      merges.push({s:{r:baseR+1,c:1},e:{r:baseR+5,c:1}});
+      merges.push({s:{r:baseR+1,c:3},e:{r:baseR+5,c:3}});
+
+      // コメント行（編集可能テキスト）
+      ws[XLSX.utils.encode_cell({r:baseR+6,c:1})]={v:leftCell.comment||'',t:'s'};
+      ws[XLSX.utils.encode_cell({r:baseR+6,c:3})]={v:rightCell.comment||'',t:'s'};
+      rowH.push({hpt:28});
+    }
+
+    // ©国土地理院
+    const lastR=photoStartRow+3*7;
+    ws[XLSX.utils.encode_cell({r:lastR,c:0})]={v:'©国土地理院',t:'s'};
+    rowH.push({hpt:12});
+
+    ws['!rows']=rowH;
+    ws['!merges']=merges;
+
+    // シートの範囲を設定
+    ws['!ref']=`A1:E${lastR+1}`;
+
+    // ===== 画像を埋め込む =====
+    if(!ws['!images'])ws['!images']=[];
+
+    // 俯瞰図
+    const overviewData=project.mapData.overview;
+    const markers=page.cells
+      .map((cell,i)=>cell.photo&&cell.lat?{num:sn+i+1,lat:cell.lat,lng:cell.lng,heading:cell.heading}:null)
+      .filter(Boolean);
+    const bestView=calcBestMapView(markers,page.mapDetail,400,200);
+    const redBox=bestView?{lat:bestView.lat,lng:bestView.lng,zoom:bestView.zoom}:null;
+
+    if(overviewData){
+      try{
+        const mapHtml=buildStaticMapHtml(overviewData.centerLat,overviewData.centerLng,overviewData.zoom,400,200,null,redBox);
+        const dataUrl=await getMapImageDataUrl(mapHtml);
+        if(dataUrl){
+          ws['!images'].push({name:'overview',data:dataUrl.split(',')[1],opts:{base64:true,type:'png'},tl:{col:1.1,row:2.1},br:{col:1.9,row:11.9}});
+        }
+      }catch(e){console.error('俯瞰図埋め込みエラー:',e);}
+    }
+
+    // 視点場図
+    if(bestView){
+      try{
+        const detailHtml=buildStaticMapHtml(bestView.lat,bestView.lng,bestView.zoom,400,200,markers,null);
+        const dataUrl=await getMapImageDataUrl(detailHtml);
+        if(dataUrl){
+          ws['!images'].push({name:'detail',data:dataUrl.split(',')[1],opts:{base64:true,type:'png'},tl:{col:3.1,row:2.1},br:{col:3.9,row:11.9}});
+        }
+      }catch(e){console.error('視点場図埋め込みエラー:',e);}
+    }
+
+    // 各写真を埋め込む
+    for(let row=0;row<3;row++){
+      for(let col=0;col<2;col++){
+        const ci=row*2+col;
+        const cell=page.cells[ci];
+        if(!cell||!cell.photo)continue;
+        const baseR=photoStartRow+row*7;
+        const colIdx=col===0?1:3;
+        try{
+          const imgData=cell.photo.split(',')[1];
+          ws['!images'].push({
+            name:`photo_${pi}_${ci}`,
+            data:imgData,
+            opts:{base64:true,type:'jpeg'},
+            tl:{col:colIdx+0.05,row:baseR+1.05},
+            br:{col:colIdx+0.95,row:baseR+5.95}
+          });
+        }catch(e){console.error('写真埋め込みエラー:',e);}
+      }
+    }
+
+    XLSX.utils.book_append_sheet(wb,ws,`P${pi+1}`);
+  }
+
+  // ダウンロード
+  try{
+    XLSX.writeFile(wb,`${fn}_台帳.xlsx`);
+    showToast('Excelを書き出しました');
+  }catch(e){
+    console.error('Excel書き出しエラー:',e);
+    showToast('Excel書き出しに失敗しました。CSVをお試しください。');
+  }
+}
 
 function exportJson(){
   const project=projects[currentProjectId];
