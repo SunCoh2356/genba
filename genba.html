@@ -182,6 +182,27 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
 <input type="file" id="cameraInput" accept="image/*" capture="environment">
 <input type="file" id="libraryInput" accept="image/*" multiple>
 
+<!-- パスワード認証画面 -->
+<div class="screen active" id="screen-auth">
+  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;padding:32px;box-sizing:border-box;background:var(--bg)">
+    <div style="background:var(--navy);width:72px;height:72px;border-radius:16px;display:flex;align-items:center;justify-content:center;margin-bottom:24px">
+      <span style="font-size:36px">📋</span>
+    </div>
+    <h1 style="color:var(--navy);margin-bottom:8px;font-size:24px">現場台帳</h1>
+    <p style="color:var(--text-sub);font-size:13px;margin-bottom:32px;text-align:center">パスワードを入力してください</p>
+    <div style="width:100%;max-width:320px">
+      <input type="password" id="authInput" placeholder="パスワード"
+        style="width:100%;padding:14px;border:2px solid var(--border);border-radius:var(--radius);font-size:16px;box-sizing:border-box;margin-bottom:12px;outline:none"
+        onkeydown="if(event.key==='Enter')checkAuth()">
+      <button onclick="checkAuth()" class="btn btn-primary btn-full" style="font-size:16px;padding:14px">
+        ログイン
+      </button>
+      <p id="authError" style="color:#E8671B;text-align:center;font-size:13px;margin-top:12px;display:none"></p>
+      <p id="authExpiry" style="color:var(--text-sub);text-align:center;font-size:11px;margin-top:16px"></p>
+    </div>
+  </div>
+</div>
+
 <!-- 現場一覧 -->
 <div class="screen active" id="screen-list">
   <div class="app-header">
@@ -461,7 +482,7 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
   <div class="modal">
     <div class="modal-handle"></div>
     <h3>書き出し・納品</h3>
-    <button class="btn btn-primary btn-full" onclick="exportAll()" style="margin-bottom:16px;font-size:16px">🚀 一括書き出し（CSV＋写真＋地図）</button>
+    <button class="btn btn-primary btn-full" onclick="exportAll()" style="margin-bottom:16px;font-size:16px">🚀 一括書き出し（写真＋地図）</button>
     <div id="exportProgress" style="display:none;margin-bottom:16px;padding:12px;background:var(--cell-bg);border-radius:var(--radius)">
       <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:6px" id="exportProgressLabel">書き出し中...</div>
       <div style="background:var(--border);border-radius:4px;height:8px;overflow:hidden">
@@ -471,10 +492,8 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
     <div style="border-top:1px solid var(--border);padding-top:12px;margin-bottom:12px">
       <div style="font-size:12px;color:var(--text-sub);margin-bottom:10px;text-align:center">個別に書き出す</div>
       <div class="export-card" onclick="exportJson()"><div class="export-icon">📦</div><h4>データをエクスポート（JSON）</h4><p>iPhone→PC転送用。全データをJSONで書き出します。</p></div>
-      <div class="export-card" onclick="exportCsv()"><div class="export-icon">📊</div><h4>CSVデータ書き出し</h4><p>台帳データをCSVで保存します。Excelで開けます。</p></div>
       <div class="export-card" onclick="exportOriginalPhotos()"><div class="export-icon">🖼️</div><h4>オリジナル写真をPC保存</h4><p>全写真を元の画質のままPCに保存します。</p></div>
       <div class="export-card" onclick="exportMapImages()"><div class="export-icon">🗺️</div><h4>地図画像を保存</h4><p>俯瞰図・視点場図をPNG画像で保存します。</p></div>
-      <div class="export-card" onclick="exportExcelBundle()"><div class="export-icon">📊</div><h4>Excel台帳セット書き出し</h4><p>Excel＋写真・地図画像＋VBAマクロをZIPで書き出します。マクロで自動貼り付けできます。</p></div>
       <div class="export-card" onclick="openPrintPreview()"><div class="export-icon">📄</div><h4>PDF印刷プレビュー</h4><p>台帳のレイアウトを確認してから印刷・PDF保存できます。</p></div>
     </div>
     <button class="btn btn-ghost btn-full" onclick="closeModal('exportModal')">キャンセル</button>
@@ -547,6 +566,34 @@ let recognition=null,isRecording=false,recordingCellIndex=null;
 let backupMapData=null,backupCellData=null;
 
 // ===== IndexedDB =====
+// ===== パスワード認証 =====
+const FIXED_PASSWORD='0000'; // 開発中固定パスワード
+
+async function hashPassword(password){
+  const msgBuffer=new TextEncoder().encode(password);
+  const hashBuffer=await crypto.subtle.digest('SHA-256',msgBuffer);
+  const hashArray=Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+async function checkAuth(){
+  const input=document.getElementById('authInput').value;
+  const error=document.getElementById('authError');
+  if(!input){error.style.display='block';error.textContent='パスワードを入力してください';return;}
+  if(input===FIXED_PASSWORD){
+    authSuccess();
+  }else{
+    error.style.display='block';
+    error.textContent='パスワードが違います';
+    document.getElementById('authInput').value='';
+  }
+}
+
+function authSuccess(){
+  document.getElementById('screen-auth').style.display='none';
+  document.getElementById('authInput').value='';
+}
+
 function initDB(){
   return new Promise((resolve,reject)=>{
     const req=indexedDB.open('GenbaLedger',5);
@@ -1496,263 +1543,6 @@ function closeReorder(){
 function openExportModal(){openModal('exportModal')}
 
 // ===== Excel一括書き出し =====
-async function exportExcelBundle(){
-  closeModal('exportModal');
-  showToast('書き出し準備中...');
-  const project=projects[currentProjectId];
-  const fn=(project.siteName||'現場台帳').replace(/[\/\\:*?"<>|]/g,'_');
-
-  // JSZipを動的ロード
-  if(!window.JSZip){
-    await new Promise((resolve,reject)=>{
-      const script=document.createElement('script');
-      script.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
-      script.onload=resolve;
-      script.onerror=reject;
-      document.head.appendChild(script);
-    });
-  }
-
-  const zip=new JSZip();
-  const imgFolder=zip.folder('images');
-
-  // 全ページの俯瞰図・視点場図・写真を書き出し
-  for(let pi=0;pi<project.pages.length;pi++){
-    const page=project.pages[pi];
-    const sn=pi*6;
-    const overviewData=project.mapData.overview;
-    const markers=page.cells
-      .map((cell,i)=>cell.photo&&cell.lat?{num:sn+i+1,lat:cell.lat,lng:cell.lng,heading:cell.heading}:null)
-      .filter(Boolean);
-    const bestView=calcBestMapView(markers,page.mapDetail,400,200);
-    const redBox=bestView?{lat:bestView.lat,lng:bestView.lng,zoom:bestView.zoom}:null;
-
-    // 俯瞰図
-    if(overviewData){
-      try{
-        const mapHtml=buildStaticMapHtml(overviewData.centerLat,overviewData.centerLng,overviewData.zoom,400,200,null,redBox);
-        const dataUrl=await getMapImageDataUrl(mapHtml);
-        if(dataUrl){
-          const b64=dataUrl.split(',')[1];
-          imgFolder.file(`俯瞰図_P${pi+1}.png`,b64,{base64:true});
-        }
-      }catch(e){}
-    }
-
-    // 視点場図
-    if(bestView){
-      try{
-        const detailHtml=buildStaticMapHtml(bestView.lat,bestView.lng,bestView.zoom,400,200,markers,null);
-        const dataUrl=await getMapImageDataUrl(detailHtml);
-        if(dataUrl){
-          const b64=dataUrl.split(',')[1];
-          imgFolder.file(`視点場図_P${pi+1}.png`,b64,{base64:true});
-        }
-      }catch(e){}
-    }
-
-    // 各写真
-    for(let ci=0;ci<page.cells.length;ci++){
-      const cell=page.cells[ci];
-      if(!cell||!cell.photo)continue;
-      const num=sn+ci+1;
-      const b64=cell.photo.split(',')[1];
-      const ext=cell.photo.startsWith('data:image/png')?'png':'jpg';
-      imgFolder.file(`写真_${String(num).padStart(2,'0')}.${ext}`,b64,{base64:true});
-    }
-  }
-
-  // Excelファイル（レイアウト枠組み）を生成
-  const wb=XLSX.utils.book_new();
-  for(let pi=0;pi<project.pages.length;pi++){
-    const page=project.pages[pi];
-    const sn=pi*6;
-    const ws={};
-    const merges=[];
-    ws['!cols']=[{wch:1},{wch:38},{wch:1},{wch:38},{wch:1}];
-    const rowH=[];
-
-    // ヘッダー
-    const hdr=`現場名: ${project.siteName||''}　調査日: ${project.date||''}　調査者: ${project.inspector||''}　天気: ${project.weather||''}　ページ: ${pi+1}/${project.pages.length}`;
-    ws['A1']={v:hdr,t:'s'};
-    merges.push({s:{r:0,c:0},e:{r:0,c:4}});
-    rowH.push({hpt:18});
-
-    // 地図ラベル
-    ws['B2']={v:'俯瞰図',t:'s'};
-    ws['D2']={v:`写真視点場（P${pi+1}）`,t:'s'};
-    rowH.push({hpt:14});
-
-    // 地図エリア（10行）
-    merges.push({s:{r:2,c:1},e:{r:11,c:1}});
-    merges.push({s:{r:2,c:3},e:{r:11,c:3}});
-    ws['B3']={v:`→ images/俯瞰図_P${pi+1}.png`,t:'s'};
-    ws['D3']={v:`→ images/視点場図_P${pi+1}.png`,t:'s'};
-    for(let r=0;r<10;r++)rowH.push({hpt:16});
-
-    // 写真グリッド
-    const photoStartRow=12;
-    for(let row=0;row<3;row++){
-      const baseR=photoStartRow+row*7;
-      const leftCell=page.cells[row*2]||{photo:null,comment:''};
-      const rightCell=page.cells[row*2+1]||{photo:null,comment:''};
-      const leftNum=sn+row*2+1;
-      const rightNum=sn+row*2+2;
-
-      ws[XLSX.utils.encode_cell({r:baseR,c:1})]={v:`視点場${toKanji(leftNum)}`,t:'s'};
-      ws[XLSX.utils.encode_cell({r:baseR,c:3})]={v:`視点場${toKanji(rightNum)}`,t:'s'};
-      rowH.push({hpt:14});
-
-      merges.push({s:{r:baseR+1,c:1},e:{r:baseR+5,c:1}});
-      merges.push({s:{s:{r:baseR+1,c:3}},e:{r:baseR+5,c:3}});
-      ws[XLSX.utils.encode_cell({r:baseR+1,c:1})]={v:`→ images/写真_${String(leftNum).padStart(2,'0')}.jpg`,t:'s'};
-      ws[XLSX.utils.encode_cell({r:baseR+1,c:3})]={v:`→ images/写真_${String(rightNum).padStart(2,'0')}.jpg`,t:'s'};
-      for(let r=0;r<5;r++)rowH.push({hpt:16});
-
-      // コメント（編集可能）
-      ws[XLSX.utils.encode_cell({r:baseR+6,c:1})]={v:leftCell.comment||'',t:'s'};
-      ws[XLSX.utils.encode_cell({r:baseR+6,c:3})]={v:rightCell.comment||'',t:'s'};
-      rowH.push({hpt:28});
-    }
-
-    const lastR=photoStartRow+3*7;
-    ws[XLSX.utils.encode_cell({r:lastR,c:0})]={v:'©国土地理院',t:'s'};
-    rowH.push({hpt:12});
-    ws['!rows']=rowH;
-    ws['!merges']=merges;
-    ws['!ref']=`A1:E${lastR+2}`;
-    XLSX.utils.book_append_sheet(wb,ws,`P${pi+1}`);
-  }
-
-  // ExcelをZIPに追加
-  const wbout=XLSX.write(wb,{bookType:'xlsx',type:'base64'});
-  zip.file(`${fn}_台帳.xlsx`,wbout,{base64:true});
-
-  // VBAマクロのテキストを追加
-  const vba=`' =============================================
-' 現場台帳 写真・地図自動貼り付けマクロ
-' =============================================
-' 使い方：
-' 1. このExcelファイルと同じフォルダに「images」フォルダがあることを確認
-' 2. Excelを開いてAlt+F11でVBAエディタを開く
-' 3. このコードを貼り付けてF5で実行
-' =============================================
-
-Sub 画像貼り付け()
-    Dim ws As Worksheet
-    Dim imgPath As String
-    Dim basePath As String
-    basePath = ThisWorkbook.Path & "\\images\\"
-    
-    For Each ws In ThisWorkbook.Worksheets
-        Dim pageNum As Integer
-        pageNum = CInt(Replace(ws.Name, "P", ""))
-        
-        ' 既存の画像を削除
-        Dim shp As Shape
-        For Each shp In ws.Shapes
-            shp.Delete
-        Next shp
-        
-        ' 俯瞰図を貼り付け
-        imgPath = basePath & "俯瞰図_P" & pageNum & ".png"
-        If Dir(imgPath) <> "" Then
-            Call 貼り付け画像(ws, imgPath, ws.Cells(3, 2), ws.Cells(12, 2))
-        End If
-        
-        ' 視点場図を貼り付け
-        imgPath = basePath & "視点場図_P" & pageNum & ".png"
-        If Dir(imgPath) <> "" Then
-            Call 貼り付け画像(ws, imgPath, ws.Cells(3, 4), ws.Cells(12, 4))
-        End If
-        
-        ' 写真を貼り付け（3行×2列）
-        Dim row As Integer
-        For row = 0 To 2
-            Dim leftNum As Integer
-            Dim rightNum As Integer
-            leftNum = (pageNum - 1) * 6 + row * 2 + 1
-            rightNum = leftNum + 1
-            Dim baseRow As Integer
-            baseRow = 13 + row * 7
-            
-            ' 左写真
-            imgPath = basePath & "写真_" & Format(leftNum, "00") & ".jpg"
-            If Dir(imgPath) <> "" Then
-                Call 貼り付け画像(ws, imgPath, ws.Cells(baseRow + 1, 2), ws.Cells(baseRow + 5, 2))
-            End If
-            
-            ' 右写真
-            imgPath = basePath & "写真_" & Format(rightNum, "00") & ".jpg"
-            If Dir(imgPath) <> "" Then
-                Call 貼り付け画像(ws, imgPath, ws.Cells(baseRow + 1, 4), ws.Cells(baseRow + 5, 4))
-            End If
-        Next row
-    Next ws
-    
-    MsgBox "画像の貼り付けが完了しました！"
-End Sub
-
-Sub 貼り付け画像(ws As Worksheet, imgPath As String, topCell As Range, bottomCell As Range)
-    Dim pic As Picture
-    Dim left As Double, top As Double, width As Double, height As Double
-    left = topCell.left + 2
-    top = topCell.top + 2
-    width = topCell.width - 4
-    height = bottomCell.top + bottomCell.height - topCell.top - 4
-    Set pic = ws.Pictures.Insert(imgPath)
-    With pic
-        .left = left
-        .top = top
-        .width = width
-        .height = height
-        .Placement = xlMoveAndSize
-    End With
-End Sub`;
-
-  zip.file('マクロ.bas',vba);
-
-  // 手順書を追加
-  const readme=`現場台帳 Excel書き出しセット
-==============================
-
-【フォルダ構成】
-${fn}_台帳.xlsx  ← Excelファイル
-images/          ← 画像フォルダ
-  俯瞰図_P1.png
-  視点場図_P1.png
-  写真_01.jpg
-  写真_02.jpg
-  ...
-マクロ.bas       ← VBAマクロ
-
-【写真・地図を自動貼り付けする手順】
-1. ZIPを解凍して、全ファイルを同じフォルダに置く
-2. ${fn}_台帳.xlsx を開く
-3. Alt+F11 でVBAエディタを開く
-4. 左側ツリーで「Module1」をダブルクリック
-5. マクロ.basの内容を全コピーして貼り付け
-6. F5キーで実行
-7. 「画像の貼り付けが完了しました！」が表示されればOK
-
-【コメントの編集】
-各視点場の写真の下のセルが編集可能です。
-直接クリックして文字を入力・修正できます。
-`;
-
-  zip.file('README.txt',readme);
-
-  // ZIPをダウンロード
-  showToast('ZIPファイルを生成中...');
-  const zipBlob=await zip.generateAsync({type:'blob'});
-  const url=URL.createObjectURL(zipBlob);
-  const a=document.createElement('a');
-  a.href=url;
-  a.download=`${fn}_台帳セット.zip`;
-  document.body.appendChild(a);a.click();document.body.removeChild(a);
-  setTimeout(()=>URL.revokeObjectURL(url),1000);
-  showToast('書き出し完了！ZIPを解凍してREADME.txtを確認してください');
-}
 async function downloadPhoto(photoData,filename){
   try{
     const base64=photoData.split(',')[1];
