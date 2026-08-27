@@ -474,7 +474,7 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
       <div class="export-card" onclick="exportCsv()"><div class="export-icon">📊</div><h4>CSVデータ書き出し</h4><p>台帳データをCSVで保存します。Excelで開けます。</p></div>
       <div class="export-card" onclick="exportOriginalPhotos()"><div class="export-icon">🖼️</div><h4>オリジナル写真をPC保存</h4><p>全写真を元の画質のままPCに保存します。</p></div>
       <div class="export-card" onclick="exportMapImages()"><div class="export-icon">🗺️</div><h4>地図画像を保存</h4><p>俯瞰図・視点場図をPNG画像で保存します。</p></div>
-      <div class="export-card" onclick="exportExcel()"><div class="export-icon">📊</div><h4>Excel台帳書き出し（A4）</h4><p>PDFと同じレイアウトでExcelに書き出します。コメントはセルで編集できます。</p></div>
+      <div class="export-card" onclick="exportExcelBundle()"><div class="export-icon">📊</div><h4>Excel台帳セット書き出し</h4><p>Excel＋写真・地図画像＋VBAマクロをZIPで書き出します。マクロで自動貼り付けできます。</p></div>
       <div class="export-card" onclick="openPrintPreview()"><div class="export-icon">📄</div><h4>PDF印刷プレビュー</h4><p>台帳のレイアウトを確認してから印刷・PDF保存できます。</p></div>
     </div>
     <button class="btn btn-ghost btn-full" onclick="closeModal('exportModal')">キャンセル</button>
@@ -1495,94 +1495,31 @@ function closeReorder(){
 }
 function openExportModal(){openModal('exportModal')}
 
-// ===== Excel書き出し =====
-async function exportExcel(){
+// ===== Excel一括書き出し =====
+async function exportExcelBundle(){
   closeModal('exportModal');
-  showToast('Excel生成中...しばらくお待ちください');
+  showToast('書き出し準備中...');
   const project=projects[currentProjectId];
-  const wb=XLSX.utils.book_new();
   const fn=(project.siteName||'現場台帳').replace(/[\/\\:*?"<>|]/g,'_');
 
+  // JSZipを動的ロード
+  if(!window.JSZip){
+    await new Promise((resolve,reject)=>{
+      const script=document.createElement('script');
+      script.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+      script.onload=resolve;
+      script.onerror=reject;
+      document.head.appendChild(script);
+    });
+  }
+
+  const zip=new JSZip();
+  const imgFolder=zip.folder('images');
+
+  // 全ページの俯瞰図・視点場図・写真を書き出し
   for(let pi=0;pi<project.pages.length;pi++){
     const page=project.pages[pi];
     const sn=pi*6;
-
-    // ワークシート作成
-    const ws={};
-    const merges=[];
-
-    // 列幅（A:余白, B:地図/写真左, C:余白, D:地図/写真右, E:余白）
-    ws['!cols']=[{wch:1},{wch:38},{wch:1},{wch:38},{wch:1}];
-
-    // ===== ヘッダー行（行0） =====
-    const hdr=`現場名: ${project.siteName||''}　調査日: ${project.date||''}　調査者: ${project.inspector||''}　天気: ${project.weather||''}　ページ: ${pi+1}/${project.pages.length}`;
-    ws['A1']={v:hdr,t:'s'};
-    merges.push({s:{r:0,c:0},e:{r:0,c:4}});
-
-    // ===== 地図ラベル行（行1） =====
-    ws['B2']={v:'俯瞰図',t:'s'};
-    ws['D2']={v:`写真視点場（ページ${pi+1}）`,t:'s'};
-    merges.push({s:{r:1,c:1},e:{r:1,c:1}});
-    merges.push({s:{r:1,c:3},e:{r:1,c:3}});
-
-    // 地図エリア（行2-11、高さ10行分）
-    for(let r=2;r<12;r++){
-      ws[`B${r+1}`]={v:'',t:'s'};
-      ws[`D${r+1}`]={v:'',t:'s'};
-    }
-    merges.push({s:{r:2,c:1},e:{r:11,c:1}});
-    merges.push({s:{r:2,c:3},e:{r:11,c:3}});
-
-    // 行高設定
-    const rowH=[];
-    rowH.push({hpt:18}); // 行1：ヘッダー
-    rowH.push({hpt:14}); // 行2：地図ラベル
-    for(let r=0;r<10;r++) rowH.push({hpt:16}); // 行3-12：地図エリア
-
-    // ===== 写真グリッド（3行×2列） =====
-    const photoStartRow=12; // 0-indexed
-    for(let row=0;row<3;row++){
-      const baseR=photoStartRow+row*7;
-      const leftCell=page.cells[row*2]||{photo:null,comment:''};
-      const rightCell=page.cells[row*2+1]||{photo:null,comment:''};
-      const leftNum=sn+row*2+1;
-      const rightNum=sn+row*2+2;
-
-      // 視点場番号ヘッダー
-      ws[XLSX.utils.encode_cell({r:baseR,c:1})]={v:`視点場${toKanji(leftNum)}`,t:'s'};
-      ws[XLSX.utils.encode_cell({r:baseR,c:3})]={v:`視点場${toKanji(rightNum)}`,t:'s'};
-      rowH.push({hpt:14});
-
-      // 写真エリア（5行）
-      for(let r=1;r<=5;r++){
-        ws[XLSX.utils.encode_cell({r:baseR+r,c:1})]={v:'',t:'s'};
-        ws[XLSX.utils.encode_cell({r:baseR+r,c:3})]={v:'',t:'s'};
-        rowH.push({hpt:16});
-      }
-      merges.push({s:{r:baseR+1,c:1},e:{r:baseR+5,c:1}});
-      merges.push({s:{r:baseR+1,c:3},e:{r:baseR+5,c:3}});
-
-      // コメント行（編集可能テキスト）
-      ws[XLSX.utils.encode_cell({r:baseR+6,c:1})]={v:leftCell.comment||'',t:'s'};
-      ws[XLSX.utils.encode_cell({r:baseR+6,c:3})]={v:rightCell.comment||'',t:'s'};
-      rowH.push({hpt:28});
-    }
-
-    // ©国土地理院
-    const lastR=photoStartRow+3*7;
-    ws[XLSX.utils.encode_cell({r:lastR,c:0})]={v:'©国土地理院',t:'s'};
-    rowH.push({hpt:12});
-
-    ws['!rows']=rowH;
-    ws['!merges']=merges;
-
-    // シートの範囲を設定
-    ws['!ref']=`A1:E${lastR+1}`;
-
-    // ===== 画像を埋め込む =====
-    if(!ws['!images'])ws['!images']=[];
-
-    // 俯瞰図
     const overviewData=project.mapData.overview;
     const markers=page.cells
       .map((cell,i)=>cell.photo&&cell.lat?{num:sn+i+1,lat:cell.lat,lng:cell.lng,heading:cell.heading}:null)
@@ -1590,14 +1527,16 @@ async function exportExcel(){
     const bestView=calcBestMapView(markers,page.mapDetail,400,200);
     const redBox=bestView?{lat:bestView.lat,lng:bestView.lng,zoom:bestView.zoom}:null;
 
+    // 俯瞰図
     if(overviewData){
       try{
         const mapHtml=buildStaticMapHtml(overviewData.centerLat,overviewData.centerLng,overviewData.zoom,400,200,null,redBox);
         const dataUrl=await getMapImageDataUrl(mapHtml);
         if(dataUrl){
-          ws['!images'].push({name:'overview',data:dataUrl.split(',')[1],opts:{base64:true,type:'png'},tl:{col:1.1,row:2.1},br:{col:1.9,row:11.9}});
+          const b64=dataUrl.split(',')[1];
+          imgFolder.file(`俯瞰図_P${pi+1}.png`,b64,{base64:true});
         }
-      }catch(e){console.error('俯瞰図埋め込みエラー:',e);}
+      }catch(e){}
     }
 
     // 視点場図
@@ -1606,77 +1545,214 @@ async function exportExcel(){
         const detailHtml=buildStaticMapHtml(bestView.lat,bestView.lng,bestView.zoom,400,200,markers,null);
         const dataUrl=await getMapImageDataUrl(detailHtml);
         if(dataUrl){
-          ws['!images'].push({name:'detail',data:dataUrl.split(',')[1],opts:{base64:true,type:'png'},tl:{col:3.1,row:2.1},br:{col:3.9,row:11.9}});
+          const b64=dataUrl.split(',')[1];
+          imgFolder.file(`視点場図_P${pi+1}.png`,b64,{base64:true});
         }
-      }catch(e){console.error('視点場図埋め込みエラー:',e);}
+      }catch(e){}
     }
 
-    // 各写真を埋め込む
+    // 各写真
+    for(let ci=0;ci<page.cells.length;ci++){
+      const cell=page.cells[ci];
+      if(!cell||!cell.photo)continue;
+      const num=sn+ci+1;
+      const b64=cell.photo.split(',')[1];
+      const ext=cell.photo.startsWith('data:image/png')?'png':'jpg';
+      imgFolder.file(`写真_${String(num).padStart(2,'0')}.${ext}`,b64,{base64:true});
+    }
+  }
+
+  // Excelファイル（レイアウト枠組み）を生成
+  const wb=XLSX.utils.book_new();
+  for(let pi=0;pi<project.pages.length;pi++){
+    const page=project.pages[pi];
+    const sn=pi*6;
+    const ws={};
+    const merges=[];
+    ws['!cols']=[{wch:1},{wch:38},{wch:1},{wch:38},{wch:1}];
+    const rowH=[];
+
+    // ヘッダー
+    const hdr=`現場名: ${project.siteName||''}　調査日: ${project.date||''}　調査者: ${project.inspector||''}　天気: ${project.weather||''}　ページ: ${pi+1}/${project.pages.length}`;
+    ws['A1']={v:hdr,t:'s'};
+    merges.push({s:{r:0,c:0},e:{r:0,c:4}});
+    rowH.push({hpt:18});
+
+    // 地図ラベル
+    ws['B2']={v:'俯瞰図',t:'s'};
+    ws['D2']={v:`写真視点場（P${pi+1}）`,t:'s'};
+    rowH.push({hpt:14});
+
+    // 地図エリア（10行）
+    merges.push({s:{r:2,c:1},e:{r:11,c:1}});
+    merges.push({s:{r:2,c:3},e:{r:11,c:3}});
+    ws['B3']={v:`→ images/俯瞰図_P${pi+1}.png`,t:'s'};
+    ws['D3']={v:`→ images/視点場図_P${pi+1}.png`,t:'s'};
+    for(let r=0;r<10;r++)rowH.push({hpt:16});
+
+    // 写真グリッド
+    const photoStartRow=12;
     for(let row=0;row<3;row++){
-      for(let col=0;col<2;col++){
-        const ci=row*2+col;
-        const cell=page.cells[ci];
-        if(!cell||!cell.photo)continue;
-        const baseR=photoStartRow+row*7;
-        const colIdx=col===0?1:3;
-        try{
-          const imgData=cell.photo.split(',')[1];
-          ws['!images'].push({
-            name:`photo_${pi}_${ci}`,
-            data:imgData,
-            opts:{base64:true,type:'jpeg'},
-            tl:{col:colIdx+0.05,row:baseR+1.05},
-            br:{col:colIdx+0.95,row:baseR+5.95}
-          });
-        }catch(e){console.error('写真埋め込みエラー:',e);}
-      }
+      const baseR=photoStartRow+row*7;
+      const leftCell=page.cells[row*2]||{photo:null,comment:''};
+      const rightCell=page.cells[row*2+1]||{photo:null,comment:''};
+      const leftNum=sn+row*2+1;
+      const rightNum=sn+row*2+2;
+
+      ws[XLSX.utils.encode_cell({r:baseR,c:1})]={v:`視点場${toKanji(leftNum)}`,t:'s'};
+      ws[XLSX.utils.encode_cell({r:baseR,c:3})]={v:`視点場${toKanji(rightNum)}`,t:'s'};
+      rowH.push({hpt:14});
+
+      merges.push({s:{r:baseR+1,c:1},e:{r:baseR+5,c:1}});
+      merges.push({s:{s:{r:baseR+1,c:3}},e:{r:baseR+5,c:3}});
+      ws[XLSX.utils.encode_cell({r:baseR+1,c:1})]={v:`→ images/写真_${String(leftNum).padStart(2,'0')}.jpg`,t:'s'};
+      ws[XLSX.utils.encode_cell({r:baseR+1,c:3})]={v:`→ images/写真_${String(rightNum).padStart(2,'0')}.jpg`,t:'s'};
+      for(let r=0;r<5;r++)rowH.push({hpt:16});
+
+      // コメント（編集可能）
+      ws[XLSX.utils.encode_cell({r:baseR+6,c:1})]={v:leftCell.comment||'',t:'s'};
+      ws[XLSX.utils.encode_cell({r:baseR+6,c:3})]={v:rightCell.comment||'',t:'s'};
+      rowH.push({hpt:28});
     }
 
+    const lastR=photoStartRow+3*7;
+    ws[XLSX.utils.encode_cell({r:lastR,c:0})]={v:'©国土地理院',t:'s'};
+    rowH.push({hpt:12});
+    ws['!rows']=rowH;
+    ws['!merges']=merges;
+    ws['!ref']=`A1:E${lastR+2}`;
     XLSX.utils.book_append_sheet(wb,ws,`P${pi+1}`);
   }
 
-  // ダウンロード
-  try{
-    XLSX.writeFile(wb,`${fn}_台帳.xlsx`);
-    showToast('Excelを書き出しました');
-  }catch(e){
-    console.error('Excel書き出しエラー:',e);
-    showToast('Excel書き出しに失敗しました。CSVをお試しください。');
-  }
-}
+  // ExcelをZIPに追加
+  const wbout=XLSX.write(wb,{bookType:'xlsx',type:'base64'});
+  zip.file(`${fn}_台帳.xlsx`,wbout,{base64:true});
 
-function exportJson(){
-  const project=projects[currentProjectId];
-  const blob=new Blob([JSON.stringify(project,null,2)],{type:'application/json'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
-  const fn=`${(project.siteName||'現場台帳').replace(/[\/\\:*?"<>|]/g,'_')}_${project.date||'日付未設定'}.json`;
-  a.href=url;a.download=fn;document.body.appendChild(a);a.click();document.body.removeChild(a);
-  setTimeout(()=>URL.revokeObjectURL(url),1000);
-  closeModal('exportModal');showToast('データをエクスポートしました');
-}
+  // VBAマクロのテキストを追加
+  const vba=`' =============================================
+' 現場台帳 写真・地図自動貼り付けマクロ
+' =============================================
+' 使い方：
+' 1. このExcelファイルと同じフォルダに「images」フォルダがあることを確認
+' 2. Excelを開いてAlt+F11でVBAエディタを開く
+' 3. このコードを貼り付けてF5で実行
+' =============================================
 
-function exportCsv(){
-  const project=projects[currentProjectId];
-  const rows=[['現場台帳'],[]];
-  rows.push(['現場名',project.siteName||''],['調査日',project.date||''],['調査者名',project.inspector||''],['天気',project.weather||''],['備考',project.note||''],[]);
-  rows.push(['視点場番号','ページ','コメント','緯度','経度','撮影方向','写真ファイル名']);
-  project.pages.forEach((page,pi)=>{
-    page.cells.forEach((cell,ci)=>{
-      const num=pi*6+ci+1;
-      rows.push([`視点場${num}`,`ページ${pi+1}`,cell.comment||'',cell.lat!=null?cell.lat:'',cell.lng!=null?cell.lng:'',cell.heading!=null?headingToLabel(cell.heading):'',cell.photo?`視点場${String(num).padStart(2,'0')}.jpg`:'']);
-    });
-  });
-  const csv=rows.map(r=>r.map(c=>{const s=String(c);return s.includes(',')||s.includes('"')?`"${s.replace(/"/g,'""')}"`:s}).join(',')).join('\n');
-  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
-  const url=URL.createObjectURL(blob);
+Sub 画像貼り付け()
+    Dim ws As Worksheet
+    Dim imgPath As String
+    Dim basePath As String
+    basePath = ThisWorkbook.Path & "\\images\\"
+    
+    For Each ws In ThisWorkbook.Worksheets
+        Dim pageNum As Integer
+        pageNum = CInt(Replace(ws.Name, "P", ""))
+        
+        ' 既存の画像を削除
+        Dim shp As Shape
+        For Each shp In ws.Shapes
+            shp.Delete
+        Next shp
+        
+        ' 俯瞰図を貼り付け
+        imgPath = basePath & "俯瞰図_P" & pageNum & ".png"
+        If Dir(imgPath) <> "" Then
+            Call 貼り付け画像(ws, imgPath, ws.Cells(3, 2), ws.Cells(12, 2))
+        End If
+        
+        ' 視点場図を貼り付け
+        imgPath = basePath & "視点場図_P" & pageNum & ".png"
+        If Dir(imgPath) <> "" Then
+            Call 貼り付け画像(ws, imgPath, ws.Cells(3, 4), ws.Cells(12, 4))
+        End If
+        
+        ' 写真を貼り付け（3行×2列）
+        Dim row As Integer
+        For row = 0 To 2
+            Dim leftNum As Integer
+            Dim rightNum As Integer
+            leftNum = (pageNum - 1) * 6 + row * 2 + 1
+            rightNum = leftNum + 1
+            Dim baseRow As Integer
+            baseRow = 13 + row * 7
+            
+            ' 左写真
+            imgPath = basePath & "写真_" & Format(leftNum, "00") & ".jpg"
+            If Dir(imgPath) <> "" Then
+                Call 貼り付け画像(ws, imgPath, ws.Cells(baseRow + 1, 2), ws.Cells(baseRow + 5, 2))
+            End If
+            
+            ' 右写真
+            imgPath = basePath & "写真_" & Format(rightNum, "00") & ".jpg"
+            If Dir(imgPath) <> "" Then
+                Call 貼り付け画像(ws, imgPath, ws.Cells(baseRow + 1, 4), ws.Cells(baseRow + 5, 4))
+            End If
+        Next row
+    Next ws
+    
+    MsgBox "画像の貼り付けが完了しました！"
+End Sub
+
+Sub 貼り付け画像(ws As Worksheet, imgPath As String, topCell As Range, bottomCell As Range)
+    Dim pic As Picture
+    Dim left As Double, top As Double, width As Double, height As Double
+    left = topCell.left + 2
+    top = topCell.top + 2
+    width = topCell.width - 4
+    height = bottomCell.top + bottomCell.height - topCell.top - 4
+    Set pic = ws.Pictures.Insert(imgPath)
+    With pic
+        .left = left
+        .top = top
+        .width = width
+        .height = height
+        .Placement = xlMoveAndSize
+    End With
+End Sub`;
+
+  zip.file('マクロ.bas',vba);
+
+  // 手順書を追加
+  const readme=`現場台帳 Excel書き出しセット
+==============================
+
+【フォルダ構成】
+${fn}_台帳.xlsx  ← Excelファイル
+images/          ← 画像フォルダ
+  俯瞰図_P1.png
+  視点場図_P1.png
+  写真_01.jpg
+  写真_02.jpg
+  ...
+マクロ.bas       ← VBAマクロ
+
+【写真・地図を自動貼り付けする手順】
+1. ZIPを解凍して、全ファイルを同じフォルダに置く
+2. ${fn}_台帳.xlsx を開く
+3. Alt+F11 でVBAエディタを開く
+4. 左側ツリーで「Module1」をダブルクリック
+5. マクロ.basの内容を全コピーして貼り付け
+6. F5キーで実行
+7. 「画像の貼り付けが完了しました！」が表示されればOK
+
+【コメントの編集】
+各視点場の写真の下のセルが編集可能です。
+直接クリックして文字を入力・修正できます。
+`;
+
+  zip.file('README.txt',readme);
+
+  // ZIPをダウンロード
+  showToast('ZIPファイルを生成中...');
+  const zipBlob=await zip.generateAsync({type:'blob'});
+  const url=URL.createObjectURL(zipBlob);
   const a=document.createElement('a');
-  a.href=url;a.download=`${(project.siteName||'現場台帳').replace(/[\/\\:*?"<>|]/g,'_')}_${project.date||'日付未設定'}.csv`;
+  a.href=url;
+  a.download=`${fn}_台帳セット.zip`;
   document.body.appendChild(a);a.click();document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(url),1000);
-  closeModal('exportModal');showToast('CSVを書き出しました');
+  showToast('書き出し完了！ZIPを解凍してREADME.txtを確認してください');
 }
-
 async function downloadPhoto(photoData,filename){
   try{
     const base64=photoData.split(',')[1];
