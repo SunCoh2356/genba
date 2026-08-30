@@ -287,6 +287,12 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
           <div class="map-cell">
             <div class="map-cell-header">
               <span class="map-cell-label">俯瞰図</span>
+              <div style="display:flex;gap:3px;flex-wrap:wrap">
+                <button class="map-type-btn" data-type="std" onclick="switchMapType('std')" style="background:var(--navy);color:white;border:none;border-radius:4px;padding:2px 6px;font-size:9px;cursor:pointer;font-weight:700">標準</button>
+                <button class="map-type-btn" data-type="pale" onclick="switchMapType('pale')" style="background:var(--cell-bg);color:var(--text);border:none;border-radius:4px;padding:2px 6px;font-size:9px;cursor:pointer">淡色</button>
+                <button class="map-type-btn" data-type="photo" onclick="switchMapType('photo')" style="background:var(--cell-bg);color:var(--text);border:none;border-radius:4px;padding:2px 6px;font-size:9px;cursor:pointer">航空写真</button>
+                <button class="map-type-btn" data-type="blank" onclick="switchMapType('blank')" style="background:var(--cell-bg);color:var(--text);border:none;border-radius:4px;padding:2px 6px;font-size:9px;cursor:pointer">白地図</button>
+              </div>
               <button class="map-cell-btn" onclick="openMapModal('overview')">地図編集</button>
             </div>
             <div class="map-canvas-wrap" id="overviewWrap">
@@ -560,6 +566,32 @@ let currentLat=null,currentLng=null,currentHeading=null,gpsWatchId=null;
 let fullMap=null,adjustMap=null,adjustMarker=null,currentMapTarget=null;
 let adjustArrowLine=null,adjustArrowHead=null;
 let overviewMiniMap=null,detailMiniMap=null;
+
+// 地図種別
+let currentMapType='std';
+const MAP_TYPES={
+  std:  {url:'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',  label:'標準地図'},
+  pale: {url:'https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', label:'淡色地図'},
+  photo:{url:'https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg',label:'航空写真'},
+  blank:{url:'https://cyberjapandata.gsi.go.jp/xyz/blank/{z}/{x}/{y}.png',label:'白地図'},
+};
+function getMapUrl(){return MAP_TYPES[currentMapType].url;}
+function switchMapType(type){
+  currentMapType=type;
+  [overviewMiniMap,detailMiniMap,fullMap,adjustMap].forEach(map=>{
+    if(!map)return;
+    map.eachLayer(layer=>{if(layer instanceof L.TileLayer)map.removeLayer(layer);});
+    L.tileLayer(getMapUrl(),{maxZoom:18,attribution:'©国土地理院'}).addTo(map);
+  });
+  document.querySelectorAll('.map-type-btn').forEach(btn=>{
+    const active=btn.dataset.type===type;
+    btn.style.fontWeight=active?'700':'400';
+    btn.style.background=active?'var(--navy)':'var(--cell-bg)';
+    btn.style.color=active?'white':'var(--text)';
+  });
+  showToast(`${MAP_TYPES[type].label}に切り替えました`);
+}
+
 let detailEditMap=null,detailEditMarkers=[],detailEditArrows=[],activeEditCellIndex=0;
 let recognition=null,isRecording=false,recordingCellIndex=null;
 let backupMapData=null,backupCellData=null;
@@ -1024,7 +1056,7 @@ function renderOverviewMiniMap(){
   if(overviewMiniMap){overviewMiniMap.remove();overviewMiniMap=null;}
   const div=document.createElement('div');div.style.width='100%';div.style.height='100%';div.style.minHeight='160px';wrap.appendChild(div);
   overviewMiniMap=L.map(div,{zoomControl:false,dragging:false,scrollWheelZoom:false,doubleClickZoom:false,touchZoom:false}).setView([data.centerLat,data.centerLng],data.zoom);
-  L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',{maxZoom:18}).addTo(overviewMiniMap);
+  L.tileLayer(getMapUrl(),{maxZoom:18,attribution:'©国土地理院'}).addTo(overviewMiniMap);
   const page=project.pages[currentPageIndex];
   if(page.mapDetail){
     const bounds=getBoundsForZoom(page.mapDetail.centerLat,page.mapDetail.centerLng,page.mapDetail.zoom);
@@ -1073,7 +1105,7 @@ function renderDetailMiniMap(){
   if(detailMiniMap){detailMiniMap.remove();detailMiniMap=null;}
   const div=document.createElement('div');div.style.width='100%';div.style.height='100%';div.style.minHeight='160px';wrap.appendChild(div);
   detailMiniMap=L.map(div,{zoomControl:false,dragging:false,scrollWheelZoom:false,doubleClickZoom:false,touchZoom:false}).setView([data.centerLat,data.centerLng],data.zoom);
-  L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',{maxZoom:18}).addTo(detailMiniMap);
+  L.tileLayer(getMapUrl(),{maxZoom:18,attribution:'©国土地理院'}).addTo(detailMiniMap);
   updateDetailMiniMap();
   setTimeout(()=>detailMiniMap.invalidateSize(),100);
 }
@@ -1131,7 +1163,7 @@ function openMapModal(target){
     }
     if(!fullMap){
       fullMap=L.map('fullMap').setView(center,zoom);
-      L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',{attribution:'©国土地理院',maxZoom:18}).addTo(fullMap);
+      L.tileLayer(getMapUrl(),{attribution:'©国土地理院',maxZoom:18}).addTo(fullMap);
     }else{fullMap.invalidateSize();fullMap.setView(center,zoom);}
   },100);
 }
@@ -1239,7 +1271,7 @@ function openCameraScreen(cellIndex){
     const center=currentLat?[currentLat,currentLng]:data?[data.centerLat,data.centerLng]:[35.6762,139.6503];
     const zoom=data?data.zoom:17;
     cameraMap=L.map('cameraMap').setView(center,zoom);
-    L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',{attribution:'©国土地理院',maxZoom:18}).addTo(cameraMap);
+    L.tileLayer(getMapUrl(),{attribution:'©国土地理院',maxZoom:18}).addTo(cameraMap);
     page.cells.forEach((cell,i)=>{
       if(!cell.photo||!cell.lat)return;
       const n=sn+i+1;
@@ -1278,7 +1310,7 @@ function openAdjustModal(){
   if(adjustMap){adjustMap.remove();adjustMap=null;}
   setTimeout(()=>{
     adjustMap=L.map('adjustMap').setView([lat,lng],17);
-    L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',{maxZoom:18,attribution:'©国土地理院'}).addTo(adjustMap);
+    L.tileLayer(getMapUrl(),{maxZoom:18,attribution:'©国土地理院'}).addTo(adjustMap);
     adjustMarker=L.marker([lat,lng],{draggable:true}).addTo(adjustMap);
     adjustMap.invalidateSize();
     drawAdjustArrow(lat,lng,cell.heading||0);
@@ -1341,7 +1373,7 @@ function openDetailEditModal(){
     const center=data?[data.centerLat,data.centerLng]:(currentLat?[currentLat,currentLng]:[35.6762,139.6503]);
     const zoom=data?data.zoom:17;
     detailEditMap=L.map('detailEditMap').setView(center,zoom);
-    L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',{attribution:'©国土地理院',maxZoom:18}).addTo(detailEditMap);
+    L.tileLayer(getMapUrl(),{attribution:'©国土地理院',maxZoom:18}).addTo(detailEditMap);
     detailEditMap.invalidateSize();
     renderDetailEditMarkers();
     const firstWithPhoto=page.cells.findIndex(c=>c.photo);
