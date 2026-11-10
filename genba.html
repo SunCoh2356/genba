@@ -336,41 +336,53 @@ select.form-control{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:
     <h1 id="cameraScreenTitle">視点場① 撮影</h1>
     <div></div>
   </div>
-  <!-- 上段：視点場図 -->
-  <div style="position:relative;height:40vh;background:#1B2A4A">
-    <div id="cameraMap" style="width:100%;height:100%"></div>
-    <div style="position:absolute;bottom:4px;right:4px;font-size:8px;color:rgba(255,255,255,0.6)">©国土地理院</div>
-  </div>
-  <!-- 下段：方位スライダーと撮影ボタン -->
-  <div style="padding:12px;display:flex;flex-direction:column;align-items:center;gap:12px;background:var(--bg)">
-    <!-- 方位表示 -->
-    <div style="display:flex;align-items:center;gap:16px">
-      <div style="font-size:40px;transition:transform 0.2s" id="cameraBigArrow">↑</div>
-      <div style="text-align:center">
-        <div style="font-size:22px;font-weight:700;color:var(--navy)" id="cameraBigHeading">---</div>
-        <div style="font-size:11px;color:var(--text-sub)">撮影方向</div>
+  <!-- 縦向き：上段地図・下段コントロール / 横向き：左地図・右コントロール -->
+  <div id="cameraBody" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
+    <!-- 地図エリア -->
+    <div id="cameraMapWrap" style="position:relative;flex:none;height:40vh;background:#1B2A4A">
+      <div id="cameraMap" style="width:100%;height:100%"></div>
+      <div style="position:absolute;bottom:4px;right:4px;font-size:8px;color:rgba(255,255,255,0.6)">©国土地理院</div>
+    </div>
+    <!-- コントロールエリア -->
+    <div id="cameraControls" style="padding:12px;display:flex;flex-direction:column;align-items:center;gap:12px;background:var(--bg);flex:1;overflow-y:auto">
+      <!-- 方位表示 -->
+      <div style="display:flex;align-items:center;gap:16px">
+        <div style="font-size:40px;transition:transform 0.2s" id="cameraBigArrow">↑</div>
+        <div style="text-align:center">
+          <div style="font-size:22px;font-weight:700;color:var(--navy)" id="cameraBigHeading">---</div>
+          <div style="font-size:11px;color:var(--text-sub)">撮影方向</div>
+        </div>
       </div>
+      <!-- 方位スライダー -->
+      <div style="width:100%;display:flex;align-items:center;gap:8px">
+        <span style="font-size:11px;color:var(--text-sub)">W</span>
+        <input type="range" id="cameraHeadingSlider" min="0" max="359" value="0"
+          oninput="onCameraSliderChange(this.value)"
+          style="flex:1;-webkit-appearance:none;height:8px;border-radius:4px;background:linear-gradient(to right,var(--navy),var(--orange),var(--navy));outline:none">
+        <span style="font-size:11px;color:var(--text-sub)">E</span>
+      </div>
+      <div style="display:flex;gap:8px;width:100%;justify-content:center">
+        <button onclick="adjustHeading(-5)"
+          style="background:var(--navy);color:white;border:none;border-radius:6px;padding:8px 16px;font-size:16px;cursor:pointer">◀ 5°</button>
+        <button onclick="syncCompassToSlider()"
+          style="background:var(--orange);color:white;border:none;border-radius:6px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer">🧭 コンパス同期</button>
+        <button onclick="adjustHeading(5)"
+          style="background:var(--navy);color:white;border:none;border-radius:6px;padding:8px 16px;font-size:16px;cursor:pointer">5° ▶</button>
+      </div>
+      <!-- 撮影ボタン -->
+      <button onclick="triggerCameraFromScreen()" style="width:72px;height:72px;border-radius:50%;background:var(--orange);border:4px solid white;box-shadow:0 4px 12px rgba(0,0,0,0.3);font-size:28px;cursor:pointer">📷</button>
     </div>
-    <!-- 方位スライダー -->
-    <div style="width:100%;display:flex;align-items:center;gap:8px">
-      <span style="font-size:11px;color:var(--text-sub)">W</span>
-      <input type="range" id="cameraHeadingSlider" min="0" max="359" value="0"
-        oninput="onCameraSliderChange(this.value)"
-        style="flex:1;-webkit-appearance:none;height:8px;border-radius:4px;background:linear-gradient(to right,var(--navy),var(--orange),var(--navy));outline:none">
-      <span style="font-size:11px;color:var(--text-sub)">E</span>
-    </div>
-    <div style="display:flex;gap:8px;width:100%;justify-content:center">
-      <button onclick="adjustHeading(-5)"
-        style="background:var(--navy);color:white;border:none;border-radius:6px;padding:8px 16px;font-size:16px;cursor:pointer">◀ 5°</button>
-      <button onclick="syncCompassToSlider()"
-        style="background:var(--orange);color:white;border:none;border-radius:6px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer">🧭 コンパス同期</button>
-      <button onclick="adjustHeading(5)"
-        style="background:var(--navy);color:white;border:none;border-radius:6px;padding:8px 16px;font-size:16px;cursor:pointer">5° ▶</button>
-    </div>
-    <!-- 撮影ボタン -->
-    <button onclick="triggerCameraFromScreen()" style="width:72px;height:72px;border-radius:50%;background:var(--orange);border:4px solid white;box-shadow:0 4px 12px rgba(0,0,0,0.3);font-size:28px;cursor:pointer">📷</button>
   </div>
 </div>
+<style>
+@media (orientation: landscape) and (max-height: 500px) {
+  #cameraBody { flex-direction: row !important; }
+  #cameraMapWrap { width: 50% !important; height: 100% !important; flex: none !important; }
+  #cameraControls { flex: 1 !important; height: 100% !important; padding: 8px !important; gap: 6px !important; justify-content: center; }
+  #cameraControls #cameraBigArrow { font-size: 28px !important; }
+  #cameraControls #cameraBigHeading { font-size: 16px !important; }
+}
+</style>
 
 <!-- 視点場並び替え・挿入画面 -->
 <div class="screen" id="screen-reorder">
